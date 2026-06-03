@@ -159,3 +159,58 @@ export async function setTopic(topic) {
     body: { topic: topic || "" },
   });
 }
+
+// ----------------------------- Sections / themes -------------------------
+// Human-readable learning sections shown in the sidebar (req #6). Selecting a
+// section sets the topic AND serves a fresh themed task (mirrors /api/chat);
+// the "?" intro flow returns intro articles/videos for the section.
+
+// Available learning languages → [{ id, label }]. Public (static list).
+// Fail-open: returns the MVP set on any error so the dropdown always renders.
+export async function getLanguages() {
+  try {
+    const data = await apiFetch("/api/languages", { auth: false });
+    return data?.languages || [];
+  } catch {
+    return [
+      { id: "python", label: "Python" },
+      { id: "javascript", label: "JavaScript" },
+    ];
+  }
+}
+
+// List sections for a language (global seeded + the current user's own) →
+// { language, current_section_id, sections: [...] }.
+export async function getSections(language) {
+  return apiFetch(`/api/sections?language=${encodeURIComponent(language)}`);
+}
+
+// Create a user-owned section → the created section object.
+// Throws (Error.message carries backend detail) on 400 (empty/oversized
+// title; 120-char limit) and 409 (duplicate) so the UI can show inline errors.
+export async function createSection(payload) {
+  return apiFetch("/api/sections", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+// Select the current section → mirrors /api/chat:
+// { interrupted, response, state } where state.current_task_id is the NEW
+// themed task, state.cancelled_task_id is the discarded task, state.topic is
+// the new theme and state.current_section_id is the selected section.
+export async function selectSection(sessionId, sectionId) {
+  return apiFetch("/api/sections/select", {
+    method: "POST",
+    body: { session_id: sessionId, section_id: sectionId },
+  });
+}
+
+// Intro material for a section ("?" pictogram) →
+// { response, links: [{ title, url, snippet, kind: "article"|"video" }], section_id }.
+export async function getSectionIntro(sectionId, { sessionId, language } = {}) {
+  return apiFetch(`/api/sections/${encodeURIComponent(sectionId)}/intro`, {
+    method: "POST",
+    body: { session_id: sessionId || null, language: language || null },
+  });
+}

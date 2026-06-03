@@ -3,10 +3,13 @@
 Protocol (JSON messages):
   client → {type: "chat"|"code"|"goal"|"resume", user_id, session_id, text/code/answer, language?, topic?}
             {type: "topic", topic}            (convenience: persist the theme only)
+            {type: "select_section", section_id, session_id}  (spec §3.6 parity)
+            {type: "section_intro", section_id, language?}     (spec §3.6 parity)
   server → {type: "token", text}            (incremental, where applicable)
             {type: "interrupt", question}     (human-in-the-loop)
             {type: "final", response, state}  (turn complete)
             {type: "topic_ok", topic}         (theme persisted)
+            {type: "intro", response, links}  ("?" intro material)
             {type: "error", message}
 
 The optional ``topic`` (free-form theme, Group E) may ride along on any
@@ -89,7 +92,50 @@ async def ws_endpoint(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "message": str(exc)})
                 continue
 
-            if msg_type == "resume":
+            if msg_type == "select_section":
+                # Spec §3.6 parity: delegate to the SAME service function the
+                # REST endpoint uses, then reply with the standard streamed
+                # token + final turn (theme-set line + new themed task). REST is
+                # the source of truth; this only mirrors it for WS-only clients.
+                try:
+                    from app.api.sections import select_section_turn
+
+                    result = await asyncio.to_thread(
+                        select_section_turn,
+                        user_id,
+                        session_id,
+                        data.get("section_id", ""),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    continue
+                # Falls through to the shared interrupt/stream/final handling below.
+
+            elif msg_type == "section_intro":
+                # Spec §3.6 parity: the "?" intro material. Replies with a
+                # dedicated {type:"intro", response, links} message (informational
+                # turn — no graph run, no task/skill change).
+                try:
+                    from app.api.sections import section_intro as _section_intro
+
+                    intro = await asyncio.to_thread(
+                        _section_intro,
+                        user_id,
+                        data.get("section_id", ""),
+                        data.get("language"),
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "intro",
+                            "response": intro.get("response", ""),
+                            "links": intro.get("links", []),
+                        }
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    await websocket.send_json({"type": "error", "message": str(exc)})
+                continue
+
+            elif msg_type == "resume":
                 result = await asyncio.to_thread(
                     resume_turn, session_id, data.get("answer", "")
                 )

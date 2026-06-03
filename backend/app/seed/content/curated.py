@@ -98,11 +98,65 @@ TASKS = [
         "skill_id": "py_loops",
         "difficulty": 2,
         "kind": "practice",
+        "exercise_type": "implement_return",
         "entry_point": "sum_to_n",
         "prompt": "Write a function sum_to_n(n) that returns the sum of integers from 1 to n inclusive.",
         "reference_solution": "def sum_to_n(n):\n    total = 0\n    for i in range(1, n + 1):\n        total += i\n    return total\n",
         "visible_tests": [{"args": [5], "expected": 15}, {"args": [1], "expected": 1}],
         "hidden_tests": [{"args": [10], "expected": 55}, {"args": [100], "expected": 5050}],
+    },
+    {
+        "id": "py_loops_trace_accumulator",
+        "language": "python",
+        "concept": "loops",
+        "skill_id": "py_loops",
+        "difficulty": 2,
+        "kind": "practice",
+        "exercise_type": "trace_value",
+        "entry_point": "",
+        "prompt": (
+            "Trace this loop by hand. After it finishes, what is the value of "
+            "`total`? Type just the final number."
+        ),
+        "given_code": "total = 0\nfor i in range(1, 4):\n    total += i",
+        "expected_answer": "6",
+        "reference_solution": "total = 0\nfor i in range(1, 4):\n    total += i\nprint(total)\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "py_loops_predict_range",
+        "language": "python",
+        "concept": "loops",
+        "skill_id": "py_loops",
+        "difficulty": 2,
+        "kind": "practice",
+        "exercise_type": "predict_output",
+        "entry_point": "",
+        "prompt": "Read the code below. What does it print? Type the exact output.",
+        "given_code": "for i in range(3):\n    print(i)",
+        "expected_answer": "0\n1\n2",
+        "reference_solution": "for i in range(3):\n    print(i)\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "py_loops_fix_offbyone",
+        "language": "python",
+        "concept": "loops",
+        "skill_id": "py_loops",
+        "difficulty": 3,
+        "kind": "similar",
+        "exercise_type": "find_the_bug",
+        "entry_point": "sum_to_n",
+        "prompt": (
+            "This function has an off-by-one bug: it should return the sum of "
+            "1..n inclusive but it misses the last number. Fix it."
+        ),
+        "given_code": "def sum_to_n(n):\n    total = 0\n    for i in range(1, n):\n        total += i\n    return total\n",
+        "reference_solution": "def sum_to_n(n):\n    total = 0\n    for i in range(1, n + 1):\n        total += i\n    return total\n",
+        "visible_tests": [{"args": [5], "expected": 15}],
+        "hidden_tests": [{"args": [10], "expected": 55}, {"args": [1], "expected": 1}],
     },
     {
         "id": "py_loops_count_even",
@@ -203,6 +257,9 @@ TASKS = [
     # Every reference_solution is sandbox-verifiable against its own tests.
     # -----------------------------------------------------------------------
     # ---- Python: variables ----
+    # Diversified by exercise_type (Problem 4): the same skill is now practised
+    # through DIFFERENT cognitive exercises — implement, predict an output, trace
+    # a value, and fix a bug — not three variants of "write a function".
     {
         "id": "py_variables_swap",
         "language": "python",
@@ -210,11 +267,69 @@ TASKS = [
         "skill_id": "py_variables",
         "difficulty": 1,
         "kind": "practice",
+        "exercise_type": "implement_return",
         "entry_point": "swap",
         "prompt": "Write swap(a, b) that returns a list [b, a] — the two values in swapped order.",
         "reference_solution": "def swap(a, b):\n    return [b, a]\n",
         "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
         "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}, {"args": [0, 0], "expected": [0, 0]}],
+    },
+    {
+        "id": "py_variables_predict_assign",
+        "language": "python",
+        "concept": "variables",
+        "skill_id": "py_variables",
+        "difficulty": 1,
+        "kind": "practice",
+        "exercise_type": "predict_output",
+        "entry_point": "",
+        "prompt": (
+            "Read the code below. What does it print? Type the exact output."
+        ),
+        "given_code": "a = 5\nb = a\na = a + 3\nprint(a, b)",
+        "expected_answer": "8 5",
+        # reference_solution = the given code (its real output IS the answer; the
+        # generator/verify path can re-derive expected_answer by running it).
+        "reference_solution": "a = 5\nb = a\na = a + 3\nprint(a, b)\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "py_variables_trace_swap",
+        "language": "python",
+        "concept": "variables",
+        "skill_id": "py_variables",
+        "difficulty": 1,
+        "kind": "practice",
+        "exercise_type": "trace_value",
+        "entry_point": "",
+        "prompt": (
+            "Trace the code by hand. After it runs, what is the value of `x`? "
+            "Type just the final value of x."
+        ),
+        "given_code": "x = 10\ny = 20\ntmp = x\nx = y\ny = tmp",
+        "expected_answer": "20",
+        "reference_solution": "x = 10\ny = 20\ntmp = x\nx = y\ny = tmp\nprint(x)\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "py_variables_fix_swap",
+        "language": "python",
+        "concept": "variables",
+        "skill_id": "py_variables",
+        "difficulty": 2,
+        "kind": "practice",
+        "exercise_type": "find_the_bug",
+        "entry_point": "swap",
+        "prompt": (
+            "The function below is supposed to return [b, a] but it has a bug. "
+            "Fix it so swap(a, b) returns the two values in swapped order."
+        ),
+        "given_code": "def swap(a, b):\n    return [a, b]\n",
+        "reference_solution": "def swap(a, b):\n    return [b, a]\n",
+        "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
+        "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}],
     },
     # ---- Python: io ----
     {
@@ -224,11 +339,46 @@ TASKS = [
         "skill_id": "py_io",
         "difficulty": 1,
         "kind": "practice",
+        "exercise_type": "implement_return",
         "entry_point": "greet",
         "prompt": "Write greet(name) that returns the string 'Hello, <name>!' (e.g. greet('Sam') -> 'Hello, Sam!').",
         "reference_solution": "def greet(name):\n    return 'Hello, ' + name + '!'\n",
         "visible_tests": [{"args": ["Sam"], "expected": "Hello, Sam!"}],
         "hidden_tests": [{"args": ["Ada"], "expected": "Hello, Ada!"}, {"args": [""], "expected": "Hello, !"}],
+    },
+    {
+        "id": "py_io_predict_fstring",
+        "language": "python",
+        "concept": "io",
+        "skill_id": "py_io",
+        "difficulty": 1,
+        "kind": "practice",
+        "exercise_type": "predict_output",
+        "entry_point": "",
+        "prompt": "Read the code below. What does it print? Type the exact output.",
+        "given_code": "name = 'Ada'\nprint(f'Hello, {name}!')",
+        "expected_answer": "Hello, Ada!",
+        "reference_solution": "name = 'Ada'\nprint(f'Hello, {name}!')\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "py_io_fill_greet",
+        "language": "python",
+        "concept": "io",
+        "skill_id": "py_io",
+        "difficulty": 1,
+        "kind": "practice",
+        "exercise_type": "fill_in_the_blank",
+        "entry_point": "greet",
+        "prompt": (
+            "Complete the function so greet(name) returns 'Hello, <name>!'. "
+            "Replace the ___ blank and submit the full function."
+        ),
+        "template": "def greet(name):\n    return 'Hello, ' + ___ + '!'\n",
+        "reference_solution": "def greet(name):\n    return 'Hello, ' + name + '!'\n",
+        "visible_tests": [{"args": ["Sam"], "expected": "Hello, Sam!"}],
+        "hidden_tests": [{"args": ["Ada"], "expected": "Hello, Ada!"}],
     },
     # ---- Python: functions ----
     {
@@ -423,11 +573,46 @@ TASKS = [
         "skill_id": "js_variables",
         "difficulty": 1,
         "kind": "practice",
+        "exercise_type": "implement_return",
         "entry_point": "swap",
         "prompt": "Write swap(a, b) that returns an array [b, a] — the two values in swapped order.",
         "reference_solution": "function swap(a, b) {\n  return [b, a];\n}\n",
         "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
         "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}, {"args": [0, 0], "expected": [0, 0]}],
+    },
+    {
+        "id": "js_variables_predict_assign",
+        "language": "javascript",
+        "concept": "variables",
+        "skill_id": "js_variables",
+        "difficulty": 1,
+        "kind": "practice",
+        "exercise_type": "predict_output",
+        "entry_point": "",
+        "prompt": "Read the code below. What does it print? Type the exact output.",
+        "given_code": "let a = 5;\nlet b = a;\na = a + 3;\nconsole.log(a, b);",
+        "expected_answer": "8 5",
+        "reference_solution": "let a = 5;\nlet b = a;\na = a + 3;\nconsole.log(a, b);\n",
+        "visible_tests": [],
+        "hidden_tests": [],
+    },
+    {
+        "id": "js_variables_fix_swap",
+        "language": "javascript",
+        "concept": "variables",
+        "skill_id": "js_variables",
+        "difficulty": 2,
+        "kind": "practice",
+        "exercise_type": "find_the_bug",
+        "entry_point": "swap",
+        "prompt": (
+            "The function below should return [b, a] but it has a bug. Fix it so "
+            "swap(a, b) returns the two values in swapped order."
+        ),
+        "given_code": "function swap(a, b) {\n  return [a, b];\n}\n",
+        "reference_solution": "function swap(a, b) {\n  return [b, a];\n}\n",
+        "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
+        "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}],
     },
     # ---- JavaScript: io ----
     {

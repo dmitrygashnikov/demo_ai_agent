@@ -44,6 +44,8 @@ def run_turn(
     language: str | None = None,
     task_id: str | None = None,
     topic: str | None = None,
+    section_change: bool = False,
+    section_title: str | None = None,
 ) -> dict:
     """Run one conversational turn. Returns a dict with response + metadata.
 
@@ -54,6 +56,13 @@ def run_turn(
     web-search queries. When not explicitly supplied for this turn, the user's
     persisted ``User.topic`` is loaded so the theme survives across turns
     without the client having to resend it. Empty/None = neutral behaviour.
+
+    ``section_change`` (req. 6/7) marks a section-select turn: the router sends
+    it down the section → skill_path_builder → task_selector path, the selector
+    DISCARDS the previously-served task and mints a fresh themed one, and the
+    theme-set acknowledgement line ("🎨 Theme set to …") is prepended server-side
+    (so it is consistent across REST/WS). ``section_title`` is the human-readable
+    title used in that acknowledgement.
     """
     graph = get_graph()
 
@@ -105,6 +114,14 @@ def run_turn(
     # recover the active task if the checkpoint lost it.
     if task_id:
         state_in["current_task_id"] = task_id
+    # Section-change turn (req. 6/7): mark the turn so the router routes it down
+    # the "section" → skill_path_builder → task_selector path and task_selector
+    # discards the previously-served task + mints a fresh themed one. Always set
+    # the flag (even False) so a stale checkpointed True never leaks into an
+    # ordinary subsequent turn.
+    state_in["section_change"] = bool(section_change)
+    if section_change and section_title:
+        state_in["section_title"] = section_title
 
     try:
         result = graph.invoke(state_in, config=config)
@@ -153,6 +170,10 @@ def _interpret(result: dict) -> dict:
             # Internet-tasks provenance + theme (Group B/E).
             "topic": result.get("topic"),
             "task_source": result.get("task_source"),
+            # Exercise-type variety (Problem 4): the type of the just-served task
+            # so the frontend can switch the submission UX for ANSWER-types
+            # (predict_output / trace_value ask for a TYPED VALUE, not code).
+            "last_exercise_type": result.get("last_exercise_type"),
             # Run & Check de-dup + failure remediation (req. 1, Group C). These
             # ride along automatically through REST/WS so the frontend (Group E)
             # can render the links list + explanation panel and the next-task cue.
@@ -160,5 +181,10 @@ def _interpret(result: dict) -> dict:
             "offer_next_task": result.get("offer_next_task"),
             "remediation_links": result.get("remediation_links"),
             "remediation_excerpt": result.get("remediation_excerpt"),
+            # Section change (req. 6/7): echo the new section + the id of the
+            # task that was cancelled so the frontend can update its pinned
+            # section + drop the stale task.
+            "current_section_id": result.get("current_section_id"),
+            "cancelled_task_id": result.get("cancelled_task_id"),
         },
     }

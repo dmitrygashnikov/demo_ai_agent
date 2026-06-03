@@ -51,6 +51,11 @@ class User(Base):
     # web-search queries. NULL/empty = neutral (today's behaviour). The DB column
     # is owned by Group B (schema); the topic switch API/UI is Group E.
     topic: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Active SECTION (sidebar theme, req. 6) selected by the user. Mirrors the
+    # single-value ``topic`` pattern: exactly one current section per user.
+    # NULL = none selected yet. The DB column is owned by Group B (schema); the
+    # section select API/UI is a later group.
+    current_section_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Total number of code solutions the student has submitted. Drives the
     # task-uniqueness cooldown counter.
     solve_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -193,9 +198,95 @@ class GeneratedTask(Base):
     reference_solution: Mapped[str] = mapped_column(Text, nullable=False)
     visible_tests: Mapped[list] = mapped_column(JSON, default=list)
     hidden_tests: Mapped[list] = mapped_column(JSON, default=list)
+    # Problem 4: exercise-type taxonomy + supporting fields. Defaults keep older
+    # generated rows backward-compatible (treated as ``implement_return`` with no
+    # given_code/template/expected_answer). New columns are added in-place via an
+    # idempotent ADD COLUMN IF NOT EXISTS migration in ``main.py`` so existing
+    # volumes upgrade safely (create_all only adds them on a fresh volume).
+    exercise_type: Mapped[str] = mapped_column(
+        String, server_default="implement_return", default="implement_return", nullable=False
+    )
+    given_code: Mapped[str] = mapped_column(Text, server_default="", default="", nullable=False)
+    template: Mapped[str] = mapped_column(Text, server_default="", default="", nullable=False)
+    expected_answer: Mapped[str] = mapped_column(
+        Text, server_default="", default="", nullable=False
+    )
     # Free-form theme this task was generated for (may be NULL/empty = neutral).
     topic: Mapped[str | None] = mapped_column(String, nullable=True)
     # The user the task was generated for (audit/provenance; not a hard FK so a
     # generated task survives even if the user row is later removed).
     created_by: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Section(Base):
+    """A learning section/theme shown in the sidebar (req. 6).
+
+    Seeded sections are human-readable per language; users may also add their own.
+    A section optionally maps to a skill concept so selecting it can set the topic
+    and (when relevant) steer the skill axis. ``key`` is a stable slug used by the
+    API/seed; ``title`` is what the sidebar renders.
+    """
+
+    __tablename__ = "sections"
+    __table_args__ = (
+        UniqueConstraint("language", "key", name="uq_section_lang_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    language: Mapped[str] = mapped_column(String, index=True, nullable=False)  # python | javascript
+    key: Mapped[str] = mapped_column(String, nullable=False)                   # slug, e.g. "data_analysis_pandas"
+    title: Mapped[str] = mapped_column(String, nullable=False)                 # human-readable, e.g. "Data analysis with pandas"
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Optional concept this section maps to (for skill steering); "" = pure topic theme.
+    concept: Mapped[str] = mapped_column(String, default="", nullable=False)
+    # Free-form topic string applied when this section is selected (defaults to title).
+    topic: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_user_created: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # NULL for seeded/global sections; set to a user id for user-created sections.
+    owner_user_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RemediationLink(Base):
+    """Persisted remediation/intro link reusable across students (req. 3).
+
+    Pragmatic counter-based health tracking (NOT full event logging): a rolling
+    3-day window + a fail counter drives pruning. Saved by web_search/remediation
+    and the "?" intro flow; verified for availability at serve-time.
+    """
+
+    __tablename__ = "remediation_links"
+    __table_args__ = (
+        UniqueConstraint("url", "error_type", "language", name="uq_link_url_err_lang"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    url: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String, default="", nullable=False)
+    snippet: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    language: Mapped[str] = mapped_column(String, default="", nullable=False, index=True)
+    # Reuse key: the concrete error/topic this link explains. For remediation use
+    # an error symbol/type (e.g. "TypeError", "off_by_one"); for intro/"?" use the
+    # section concept/key (e.g. "loops", "data_analysis_pandas").
+    error_type: Mapped[str] = mapped_column(String, default="", nullable=False, index=True)
+    concept: Mapped[str] = mapped_column(String, default="", nullable=False, index=True)
+    # "remediation" | "intro" — lets the "?" flow and the failure flow share a table.
+    kind: Mapped[str] = mapped_column(
+        String, default="remediation", server_default="remediation", nullable=False
+    )
+
+    # ---- Pragmatic health counters (the "50 fails in 3 days" rule) ----
+    fail_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    fail_window_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_checked: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_ok: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

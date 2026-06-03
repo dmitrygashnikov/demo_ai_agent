@@ -47,6 +47,14 @@ def intent_router(state: TutorState) -> dict:
     message = state.get("user_message", "") or ""
     submitted_code = state.get("submitted_code")
 
+    # Section-change turn (req. 6/7) is unambiguous: the student clicked a
+    # sidebar section. Route straight to the goal path (skill_path_builder →
+    # task_selector) so the current skill is (re)derived for the new language
+    # and task_selector mints a fresh themed task while emitting the theme-set
+    # line. Takes precedence over message classification (there is no message).
+    if state.get("section_change"):
+        return {"intent": "section", "next_action": "section"}
+
     # Code submissions are unambiguous — route directly.
     if submitted_code:
         return {"intent": "code", "next_action": "code"}

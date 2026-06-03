@@ -6,6 +6,7 @@ curated base) and stored with rich metadata for filtered retrieval.
 from __future__ import annotations
 
 import logging
+import os
 
 from app.rag.vectorstore import get_vectorstore
 from app.seed.content.curated import THEORY, VIDEOS
@@ -15,11 +16,24 @@ logger = logging.getLogger(__name__)
 
 
 def ingest_all(force: bool = False) -> int:
-    """Index theory, videos and task prompts. Returns number of docs indexed."""
+    """Index theory, videos and task prompts. Returns number of docs indexed.
+
+    Idempotency (req. 9 enablement): historically this early-returned whenever
+    ``count() > 0``, which blocked newly seeded content from ever being added on
+    an existing volume. The skip is now gated behind ``force`` OR the
+    ``RAG_REINGEST`` env flag, so re-seeding new docs is possible on demand while
+    a normal restart on a populated store stays cheap. Qdrant upsert is itself
+    idempotent (stable per-doc ids), so re-ingesting is safe.
+    """
     store = get_vectorstore()
     store.ensure_collection()
 
-    if not force and store.count() > 0:
+    reingest = force or os.getenv("RAG_REINGEST", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if not reingest and store.count() > 0:
         logger.info("Vector store already populated (%d docs); skipping", store.count())
         return store.count()
 

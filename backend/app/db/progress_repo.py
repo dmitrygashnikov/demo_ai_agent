@@ -190,6 +190,32 @@ def set_user_topic(user_id: str, topic: str | None) -> str | None:
         return normalised
 
 
+def get_current_section(user_id: str) -> str | None:
+    """Return the user's persisted current sidebar section id, or None.
+
+    Mirrors :func:`get_user_topic` (single-value per-user state). Fail-soft: a
+    missing user row simply yields ``None`` (no section selected yet).
+    """
+    with get_session() as session:
+        user = session.get(User, user_id)
+        return getattr(user, "current_section_id", None) if user else None
+
+
+def set_current_section(user_id: str, section_id: str | None) -> str | None:
+    """Persist the user's current sidebar section id (req. 6 / #7).
+
+    Mirrors :func:`set_user_topic`: get-or-create the user row, then store the
+    id (``None`` clears it). Orthogonal to skill progress — selecting a section
+    NEVER resets the adaptive trajectory; it only drives the active topic +
+    section highlight. Returns the stored value.
+    """
+    normalised = (section_id or "").strip() or None
+    with get_session() as session:
+        user = _ensure_user_row(session, user_id)
+        user.current_section_id = normalised
+        return normalised
+
+
 def get_or_create_progress(user_id: str, skill_id: str) -> dict:
     with get_session() as session:
         # FK safety: ensure the parent users row exists before inserting a

@@ -41,6 +41,10 @@ def new_generated_id() -> str:
 
 
 def _record_to_task(rec: GeneratedTask) -> Task:
+    # ``getattr`` defaults keep this resilient to rows created before the
+    # Problem-4 columns existed (and to a stale ORM cache during migration).
+    from app.tasks.repository import normalize_exercise_type
+
     return Task(
         id=rec.id,
         language=rec.language,
@@ -53,6 +57,10 @@ def _record_to_task(rec: GeneratedTask) -> Task:
         reference_solution=rec.reference_solution,
         visible_tests=list(rec.visible_tests or []),
         hidden_tests=list(rec.hidden_tests or []),
+        exercise_type=normalize_exercise_type(getattr(rec, "exercise_type", None)),
+        given_code=getattr(rec, "given_code", "") or "",
+        template=getattr(rec, "template", "") or "",
+        expected_answer=getattr(rec, "expected_answer", "") or "",
     )
 
 
@@ -85,6 +93,10 @@ def save_generated_task(
                         reference_solution=task.reference_solution,
                         visible_tests=list(task.visible_tests),
                         hidden_tests=list(task.hidden_tests),
+                        exercise_type=getattr(task, "exercise_type", "implement_return"),
+                        given_code=getattr(task, "given_code", "") or "",
+                        template=getattr(task, "template", "") or "",
+                        expected_answer=getattr(task, "expected_answer", "") or "",
                         topic=topic,
                         created_by=created_by,
                     )

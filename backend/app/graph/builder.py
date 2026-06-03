@@ -52,6 +52,11 @@ def route_intent(state) -> str:
         "question": "rag_retriever",
         "code": "code_validator",
         "clarify": "clarify",
+        # Section-change turn (req. 6/7): skip goal_planner (there is no goal
+        # text) and go straight to skill_path_builder so the current skill is
+        # (re)derived for the section's language, then task_selector mints a
+        # fresh themed task and emits the theme-set line.
+        "section": "skill_path_builder",
     }.get(state.get("intent", "question"), "rag_retriever")
 
 
@@ -113,6 +118,8 @@ def build_graph(checkpointer):
             "rag_retriever": "rag_retriever",
             "code_validator": "code_validator",
             "clarify": "clarify",
+            # Section-change turn (req. 6/7) → skill_path_builder → task_selector.
+            "skill_path_builder": "skill_path_builder",
         },
     )
 

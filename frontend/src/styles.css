@@ -12,14 +12,83 @@ body {
   padding: 16px;
   overflow-y: auto;
   border-right: 1px solid #242838;
+  position: relative;
+  flex-shrink: 0;
+  transition: width 0.15s ease;
 }
+/* Collapsible sidebar (req #5): collapses to a narrow rail; the .main panel
+   reflows automatically because the sidebar is flex-shrink:0 in the flex row. */
+.sidebar.collapsed {
+  width: 40px;
+  padding: 8px 4px;
+  overflow: hidden;
+}
+.sidebar-toggle {
+  width: 28px; height: 28px; padding: 0; line-height: 1;
+  font-size: 12px; border-radius: 6px; margin-bottom: 8px;
+}
+.sidebar.collapsed .sidebar-toggle { width: 32px; }
+.progress-head { margin-top: 20px; }
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .header { padding: 12px 16px; background: #161922; border-bottom: 1px solid #242838; }
 .header h1 { font-size: 16px; margin: 0; }
 .header small { color: #8a90a2; }
 .content { flex: 1; display: flex; min-height: 0; }
-.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #242838; }
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .messages { flex: 1; overflow-y: auto; padding: 16px; }
+
+/* Draggable splitter between chat and editor (req #4). The .content row is
+   horizontal, so the handle resizes columns (col-resize). */
+.splitter {
+  flex: 0 0 6px;
+  width: 6px;
+  cursor: col-resize;
+  background: #242838;
+  border-left: 1px solid #1b1e29;
+  border-right: 1px solid #1b1e29;
+  transition: background 0.12s ease;
+}
+.splitter:hover { background: #1f6feb; }
+.splitter:focus-visible { outline: 2px solid #1f6feb; outline-offset: -2px; background: #1f6feb; }
+/* While dragging, lock the cursor + suppress text selection / iframe (Monaco)
+   pointer capture across the whole document. */
+body.splitter-dragging { cursor: col-resize; user-select: none; }
+body.splitter-dragging iframe { pointer-events: none; }
+
+/* Floating scroll-to-bottom arrow + unread badge (req #1) */
+.scroll-bottom-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 76px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: #2a2f40;
+  color: #e6e6e6;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  opacity: 0.85;
+  z-index: 5;
+}
+.scroll-bottom-btn:hover { background: #1f6feb; opacity: 1; }
+.scroll-bottom-btn.has-unread { background: #1f6feb; opacity: 1; }
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
 .msg { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; }
 .msg.user { background: #1f6feb33; border: 1px solid #1f6feb55; }
 .msg.assistant { background: #1c2030; border: 1px solid #242838; }
@@ -28,7 +97,10 @@ body {
 button { background: #1f6feb; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
 button:hover { background: #2a7af0; }
 button.secondary { background: #2a2f40; }
-.editor-panel { width: 46%; display: flex; flex-direction: column; min-width: 320px; }
+/* Editor panel width is driven by the splitter's inline `width: N%` (req #4).
+   flex-shrink:0 stops the flex row from squeezing it below that %; the 200px
+   floor is a hard minimum well under the 25% JS clamp. */
+.editor-panel { width: 46%; display: flex; flex-direction: column; min-width: 200px; flex-shrink: 0; }
 .editor-toolbar { display: flex; gap: 8px; padding: 8px; background: #161922; align-items: center; }
 .editor-toolbar select { background: #0f1117; color: #e6e6e6; border: 1px solid #2a2f40; padding: 6px; border-radius: 6px; }
 .skill { padding: 8px; margin-bottom: 6px; border-radius: 6px; background: #1c2030; font-size: 13px; }
@@ -104,28 +176,72 @@ button.secondary { background: #2a2f40; }
 .user-email { margin-top: 2px; word-break: break-all; }
 .logout-btn { margin-top: 10px; width: 100%; padding: 8px; font-size: 13px; }
 
-/* Topic / theme selector (editor toolbar second row) */
-.topic-toolbar {
-  display: flex; gap: 8px; padding: 8px; background: #161922;
-  align-items: center; flex-wrap: wrap; border-top: 1px solid #242838;
+/* Sidebar sections / themes panel (req #6, #8) */
+.sections-panel { margin-bottom: 8px; }
+.sections-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px;
 }
-.topic-label { font-weight: 600; }
-.topic-select, .topic-input {
+.sections-head h3 { margin: 0; }
+.sections-lang { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+.sections-lang select {
   background: #0f1117; color: #e6e6e6; border: 1px solid #2a2f40;
-  padding: 6px; border-radius: 6px; font-size: 13px;
+  padding: 4px 6px; border-radius: 6px; font-size: 13px;
 }
-.topic-input { flex: 1; min-width: 120px; }
-.topic-set { padding: 6px 12px; font-size: 13px; }
-.topic-chip {
-  display: inline-flex; align-items: center; gap: 6px;
+.sections-filter {
+  width: 100%; padding: 7px 9px; border-radius: 6px;
+  border: 1px solid #2a2f40; background: #0f1117; color: #e6e6e6;
+  font-size: 13px; margin-bottom: 8px;
+}
+.sections-list { display: flex; flex-direction: column; gap: 6px; }
+.section-card {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 8px 10px; border-radius: 6px; background: #1c2030;
+  border: 1px solid #242838; cursor: pointer; font-size: 13px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.section-card:hover { background: #232838; border-color: #2f3650; }
+.section-card:focus-visible { outline: 2px solid #1f6feb; outline-offset: 1px; }
+/* Pinned + highlighted current section (req #6) */
+.section-card.current {
+  border-color: #1f6feb; background: #1f6feb22;
+}
+.section-card-main { flex: 1; min-width: 0; }
+.section-title {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-weight: 600; line-height: 1.3;
+}
+.section-pin { font-size: 11px; }
+.section-tag {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
   background: #6f42c133; border: 1px solid #6f42c188; color: #d6bcfa;
-  padding: 3px 8px; border-radius: 12px; font-size: 12px; max-width: 100%;
+  padding: 0 5px; border-radius: 8px;
 }
-.topic-clear {
-  background: transparent; color: #d6bcfa; border: none; padding: 0 2px;
-  font-size: 15px; line-height: 1; cursor: pointer;
+.section-desc { margin-top: 3px; line-height: 1.35; }
+.section-help {
+  flex-shrink: 0; width: 22px; height: 22px; padding: 0;
+  border-radius: 50%; background: #2a2f40; color: #cdd3e0;
+  font-size: 13px; font-weight: 700; line-height: 1; cursor: pointer;
 }
-.topic-clear:hover { background: transparent; color: #fff; }
+.section-help:hover { background: #1f6feb; color: #fff; }
+.sections-add { margin-top: 10px; }
+.section-add-btn { width: 100%; padding: 7px; font-size: 13px; }
+.section-add-form { display: flex; flex-direction: column; gap: 6px; }
+.section-add-form input {
+  width: 100%; padding: 7px 9px; border-radius: 6px;
+  border: 1px solid #2a2f40; background: #0f1117; color: #e6e6e6; font-size: 13px;
+}
+.section-add-actions { display: flex; gap: 6px; }
+.section-add-actions button { flex: 1; padding: 7px; font-size: 13px; }
+.section-add-err {
+  font-size: 12px; padding: 6px 8px; border-radius: 6px;
+  background: #c0392b33; border: 1px solid #c0392b66; color: #f3b6ae;
+}
+
+/* Intro material panel ("?" pictogram results) — distinguishes video/article */
+.intro-panel { border-left: 3px solid #6f42c1; }
+.intro-video > a { color: #d6bcfa; }
+.intro-kind { font-size: 12px; }
 
 /* Structured message metadata (badges, remediation links/excerpt, next cue) */
 .msg-meta { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
