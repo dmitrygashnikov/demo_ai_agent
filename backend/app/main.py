@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import auth_router
 from app.api.routes import router as rest_router
 from app.api.ws import ws_router
 from app.config import settings
@@ -25,6 +26,30 @@ def _startup_seed() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("DB init failed: %s", exc)
 
+    # Lightweight schema migration for the new auth columns on existing volumes
+    # (ADD COLUMN IF NOT EXISTS). On a fresh volume create_all already added
+    # them; this makes upgrades on a pre-existing DB safe too.
+    try:
+        from sqlalchemy import text
+
+        from app.db.session import engine
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR")
+            )
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR")
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email "
+                    "ON users (email)"
+                )
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Auth column migration failed: %s", exc)
+
     # Seed the runtime graph-settings row (idempotent) and warm the cache.
     try:
         from app.settings_store import seed_runtime_settings
@@ -33,15 +58,28 @@ def _startup_seed() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("Runtime settings seeding failed: %s", exc)
 
-    if not settings.SEED_ON_STARTUP:
-        return
-
+    # Seed skills BEFORE the default user so profile skill_progress rows have a
+    # valid skills FK. Skills are always seeded (independent of SEED_ON_STARTUP)
+    # because the default-user profile + adaptive graph depend on them.
     try:
         from app.seed.skills import seed_skills
 
         seed_skills()
     except Exception as exc:  # noqa: BLE001
         logger.error("Skill seeding failed: %s", exc)
+
+    # Seed the default APPLICATION user (admin@example.com / qwerty123456 by
+    # default) with an initialised learning profile. This is both a ready login
+    # AND a safeguard guaranteeing a valid users row exists (FK safety).
+    try:
+        from app.seed.default_user import seed_default_user
+
+        seed_default_user()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Default user seeding failed: %s", exc)
+
+    if not settings.SEED_ON_STARTUP:
+        return
 
     try:
         from app.rag.ingestion import ingest_all
@@ -73,6 +111,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(rest_router)
 app.include_router(ws_router)
 

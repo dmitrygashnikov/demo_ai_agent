@@ -64,6 +64,21 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str = ""
     LANGFUSE_HOST: str = "http://langfuse:3000"
 
+    # --- Authentication (application JWT auth — NOT Langfuse) ---
+    # Secret used to sign application JWTs. A dev default is provided so the
+    # stack runs out-of-the-box; CHANGE THIS IN PRODUCTION via .env.
+    JWT_SECRET: str = "dev-insecure-change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+
+    # --- Default application user (seeded at startup) ---
+    # Acts both as a ready-to-use login AND as a safeguard guaranteeing at least
+    # one valid user row exists (so skill_progress FKs never dangle).
+    APP_DEFAULT_USER_EMAIL: str = "admin@example.com"
+    APP_DEFAULT_USER_PASSWORD: str = "qwerty123456"
+    APP_DEFAULT_USER_NAME: str = "admin"
+    APP_DEFAULT_USER_LANGUAGE: str = "python"
+
     # --- App ---
     SEED_ON_STARTUP: bool = True
     LOG_LEVEL: str = "INFO"

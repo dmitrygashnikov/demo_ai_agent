@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from app.auth.deps import get_current_user
 from app.db.models import Attempt, SkillProgress, TaskServeHistory, User
 from app.db.progress_repo import get_or_create_user, get_solve_count
 from app.db.session import get_session
@@ -21,20 +22,22 @@ router = APIRouter(prefix="/api")
 
 
 class GoalRequest(BaseModel):
-    user_id: str
+    # user_id is taken from the authenticated token, not the body. Kept optional
+    # for backward compatibility but ignored.
+    user_id: str | None = None
     session_id: str
     goal: str
     language: str | None = None
 
 
 class ChatRequest(BaseModel):
-    user_id: str
+    user_id: str | None = None
     session_id: str
     message: str
 
 
 class CodeRequest(BaseModel):
-    user_id: str
+    user_id: str | None = None
     session_id: str
     code: str
 
@@ -55,32 +58,44 @@ class GraphSettingsUpdate(BaseModel):
 
 
 @router.post("/goal")
-def set_goal(req: GoalRequest):
-    get_or_create_user(req.user_id, req.language)
-    return run_turn(
-        req.user_id, req.session_id, req.goal, language=req.language
-    )
+def set_goal(req: GoalRequest, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    get_or_create_user(user_id, req.language)
+    return run_turn(user_id, req.session_id, req.goal, language=req.language)
 
 
 @router.post("/chat")
-def chat_endpoint(req: ChatRequest):
-    return run_turn(req.user_id, req.session_id, req.message)
+def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_user)):
+    return run_turn(current_user["id"], req.session_id, req.message)
 
 
 @router.post("/submit_code")
-def submit_code(req: CodeRequest):
+def submit_code(req: CodeRequest, current_user: dict = Depends(get_current_user)):
     return run_turn(
-        req.user_id, req.session_id, user_message="", submitted_code=req.code
+        current_user["id"], req.session_id, user_message="", submitted_code=req.code
     )
 
 
 @router.post("/resume")
-def resume(req: ResumeRequest):
+def resume(req: ResumeRequest, current_user: dict = Depends(get_current_user)):
     return resume_turn(req.session_id, req.answer)
 
 
+@router.get("/progress/me")
+def progress_me(current_user: dict = Depends(get_current_user)):
+    """Progress for the authenticated user (user id taken from the token)."""
+    return _progress_for(current_user["id"])
+
+
 @router.get("/progress/{user_id}")
-def progress(user_id: str):
+def progress(user_id: str, current_user: dict = Depends(get_current_user)):
+    # Authenticated; a user may only read their own progress.
+    if user_id != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return _progress_for(user_id)
+
+
+def _progress_for(user_id: str):
     with get_session() as session:
         rows = session.execute(
             select(SkillProgress).where(SkillProgress.user_id == user_id)

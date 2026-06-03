@@ -39,3 +39,12 @@ tenacity==9.0.0
 
 # --- Observability (optional LangGraph tracing via Langfuse) ---
 langfuse==2.59.7
+
+# --- Authentication (application JWT auth + password hashing) ---
+passlib[bcrypt]==1.7.4
+# Pinned to 4.0.1: passlib 1.7.4 reads bcrypt.__about__ which was removed in
+# bcrypt>=4.1, producing a harmless but noisy startup warning. 4.0.1 is clean.
+bcrypt==4.0.1
+PyJWT==2.10.1
+# Pydantic EmailStr validation for the auth request models.
+email-validator==2.2.0

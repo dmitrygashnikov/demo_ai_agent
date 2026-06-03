@@ -33,8 +33,18 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
+    # Stable internal identifier (UUID). All FKs (SkillProgress.user_id, etc.)
+    # reference this column — it is NEVER derived from email so renaming/login
+    # changes can never break referential integrity.
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Login identifier. Unique + not null for authenticated users. Older rows
+    # created before auth may have NULL email; the unique index allows multiple
+    # NULLs in Postgres.
+    email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    # Bcrypt password hash. Nullable so legacy/seed-only rows remain valid.
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Optional human-readable display name.
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     preferred_language: Mapped[str | None] = mapped_column(String, nullable=True)
     # Total number of code solutions the student has submitted. Drives the
     # task-uniqueness cooldown counter.

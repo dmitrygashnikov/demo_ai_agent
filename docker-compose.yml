@@ -121,6 +121,14 @@ services:
       REDIS_HOST: redis
       CODE_EXECUTOR_URL: http://code-executor:9000
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
+      # Application JWT auth + default application user (separate from Langfuse).
+      # Defaults make the stack work out-of-the-box; override in .env.
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-change-me-in-production}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
+      APP_DEFAULT_USER_EMAIL: ${APP_DEFAULT_USER_EMAIL:-admin@example.com}
+      APP_DEFAULT_USER_PASSWORD: ${APP_DEFAULT_USER_PASSWORD:-qwerty123456}
+      APP_DEFAULT_USER_NAME: ${APP_DEFAULT_USER_NAME:-admin}
+      APP_DEFAULT_USER_LANGUAGE: ${APP_DEFAULT_USER_LANGUAGE:-python}
       # Use the SAME keys the Langfuse project was provisioned with above, so
       # graph tracing into the admin project is enabled out-of-the-box. These
       # override any empty values coming from .env.

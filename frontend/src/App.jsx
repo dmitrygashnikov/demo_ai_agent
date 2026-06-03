@@ -1,12 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
+import Auth from "./Auth.jsx";
 import {
+  clearToken,
   getGraphSettings,
+  getMe,
   getMetricsSummary,
   getProgress,
+  getToken,
   resume as resumeApi,
   sendChat,
   setGoal,
+  setUnauthorizedHandler,
   submitCode,
   updateGraphSettings,
 } from "./api";
@@ -221,9 +226,13 @@ function GraphSettingsPanel() {
 }
 
 export default function App() {
-  const [userId] = useState(() => localStorage.getItem("uid") || uid());
   const [sessionId] = useState(() => localStorage.getItem("sid") || uid());
   const [tab, setTab] = useState("tutor"); // "tutor" | "settings"
+
+  // --- Authentication state ---
+  const [authUser, setAuthUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -240,18 +249,58 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
 
+  // Force logout (used both by the button and on any 401 from the API layer).
+  function handleLogout() {
+    clearToken();
+    setAuthUser(null);
+  }
+
+  // On startup: if a token exists, validate it via /api/auth/me.
   useEffect(() => {
-    localStorage.setItem("uid", userId);
+    setUnauthorizedHandler(() => {
+      setAuthUser(null);
+    });
+    let cancelled = false;
+    async function check() {
+      if (!getToken()) {
+        setAuthChecked(true);
+        return;
+      }
+      try {
+        const me = await getMe();
+        if (!cancelled) setAuthUser(me);
+      } catch {
+        clearToken();
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    }
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("sid", sessionId);
-  }, [userId, sessionId]);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (authUser?.preferred_language) setLanguage(authUser.preferred_language);
+  }, [authUser]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (authUser) refreshProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser]);
+
   async function refreshProgress() {
     try {
-      const p = await getProgress(userId);
+      const p = await getProgress();
       setSkills(p.skills || []);
       setSolveCount(p.solve_count || 0);
     } catch {
@@ -286,9 +335,9 @@ export default function App() {
       if (pendingInterrupt) {
         res = await resumeApi(sessionId, text);
       } else if (/want to learn|learn |goal|хочу|научиться/i.test(text)) {
-        res = await setGoal(userId, sessionId, text, null);
+        res = await setGoal(sessionId, text, null);
       } else {
-        res = await sendChat(userId, sessionId, text);
+        res = await sendChat(sessionId, text);
       }
       handleResult(res);
     } catch (e) {
@@ -303,7 +352,7 @@ export default function App() {
     pushMsg("user", "```" + language + "\n" + code + "\n```");
     setBusy(true);
     try {
-      const res = await submitCode(userId, sessionId, code);
+      const res = await submitCode(sessionId, code);
       handleResult(res);
       if (res.state?.execution_result) {
         const er = res.state.execution_result;
@@ -320,9 +369,30 @@ export default function App() {
     }
   }
 
+  // While verifying an existing token, render nothing (avoids auth flicker).
+  if (!authChecked) {
+    return (
+      <div className="auth-screen">
+        <div className="muted">Loading…</div>
+      </div>
+    );
+  }
+
+  // Not authenticated → show the login / register screen.
+  if (!authUser) {
+    return <Auth onAuthenticated={(user) => setAuthUser(user)} />;
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
+        <div className="user-box">
+          <div className="user-name">{authUser.name || authUser.email}</div>
+          <div className="muted user-email">{authUser.email}</div>
+          <button className="secondary logout-btn" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
         <h3>Progress</h3>
         <div className="muted">Solves: {solveCount}</div>
         <div style={{ marginTop: 12 }}>

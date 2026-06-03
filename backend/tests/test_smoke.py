@@ -39,6 +39,29 @@ def test_cooldown_filter():
     assert allowed2 == {"c"}
 
 
+def test_password_hash_roundtrip():
+    # bcrypt hashing + verification round-trips and rejects wrong passwords.
+    from app.auth.security import hash_password, verify_password
+
+    h = hash_password("qwerty123456")
+    assert h and h != "qwerty123456"
+    assert verify_password("qwerty123456", h) is True
+    assert verify_password("wrong-password", h) is False
+
+
+def test_jwt_roundtrip():
+    # A signed token decodes back to the same subject; tampered tokens fail.
+    from app.auth.security import create_access_token, decode_access_token
+
+    token = create_access_token("user-123", {"email": "a@b.c"})
+    claims = decode_access_token(token)
+    assert claims is not None
+    assert claims["sub"] == "user-123"
+    assert claims["email"] == "a@b.c"
+    assert decode_access_token(token + "tampered") is None
+    assert decode_access_token("not-a-token") is None
+
+
 def test_topic_guard_heuristic_off_topic():
     # A clearly off-topic question is classified off-topic by the pure heuristic
     # (no LLM call needed).

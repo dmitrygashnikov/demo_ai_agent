@@ -49,6 +49,19 @@ def run_turn(
     {"interrupted": True, "question": ...} so the caller can ask the student.
     """
     graph = get_graph()
+
+    # FK safety net: guarantee the user (and a seeded learning profile) exist
+    # BEFORE any node tries to write skill_progress/attempts. This makes the
+    # skill_progress foreign-key error impossible even if a chat/code turn
+    # arrives before /api/goal. Best-effort: never block the turn on it.
+    if user_id:
+        try:
+            from app.db.progress_repo import ensure_user_profile
+
+            ensure_user_profile(user_id, language)
+        except Exception:  # noqa: BLE001
+            logger.debug("ensure_user_profile failed (non-fatal)", exc_info=True)
+
     config = _config(
         session_id,
         run_name="tutor_turn",

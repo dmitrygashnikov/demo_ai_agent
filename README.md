@@ -35,6 +35,7 @@ graph TD
 
     subgraph Backend
         API[FastAPI gateway REST and WebSocket]
+        AUTH[Auth layer JWT bcrypt get_current_user]
         ORCH[LangGraph orchestrator]
     end
 
@@ -66,6 +67,8 @@ graph TD
 
     WEB --> API
     EDITOR --> API
+    API --> AUTH
+    AUTH --> ORCH
     API --> ORCH
     ORCH --> LLM
     ORCH --> VDB
@@ -258,6 +261,17 @@ Prerequisites: **Docker** and **Docker Compose**.
    LANGFUSE_INIT_USER_PASSWORD=qwerty123456
    ```
 
+   **Application authentication (JWT)** — the tutor app has its OWN login, separate from the Langfuse admin account. Defaults work out of the box; override in `.env`:
+   ```
+   JWT_SECRET=dev-insecure-change-me-in-production   # CHANGE in production
+   JWT_EXPIRE_MINUTES=10080                           # access-token TTL (7 days)
+   # Default application user, seeded at backend startup (login for the tutor app):
+   APP_DEFAULT_USER_EMAIL=admin@example.com
+   APP_DEFAULT_USER_PASSWORD=qwerty123456
+   APP_DEFAULT_USER_NAME=admin
+   APP_DEFAULT_USER_LANGUAGE=python
+   ```
+
 2. Build the images and bring up the stack. The verified build path works around the **EAI_AGAIN** DNS issue in the Docker build sandbox (where `npm`/`PyPI` cannot resolve registries) by using a DNS-enabled BuildKit builder (config in [`buildkitd.toml`](buildkitd.toml:1)):
 
    ```bash
@@ -279,10 +293,24 @@ Prerequisites: **Docker** and **Docker Compose**.
    This starts: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend`, plus **`langfuse`** and its dedicated **`langfuse-db`** Postgres, all with healthchecks and ordered `depends_on`. On first start the backend creates tables, seeds the Skill Graph (Python + JavaScript), seeds the runtime graph-settings row and ingests the curated RAG content. The Langfuse and Langfuse-Postgres images are pulled ready-made (no build needed).
 
 3. Access the services:
-   - **Frontend:** http://localhost:3000
+   - **Frontend:** http://localhost:3000 — opens the **authentication screen first** (login / register). Sign in with the default app user `admin@example.com` / `qwerty123456`, then the learning UI appears.
    - **API docs:** http://localhost:8000/docs
    - **Health:** http://localhost:8000/health
    - **Langfuse (tracing UI):** http://localhost:3001
+
+### Authentication (application login)
+
+The tutor application has its **own** JWT-based authentication, completely **separate from the Langfuse admin account** (which has its own login and is not touched here).
+
+- **Open registration, no email verification.** Anyone can create an account via `POST /api/auth/register` (email, password, optional name + preferred language). Passwords are hashed with **bcrypt** (passlib); a signed **JWT** is returned.
+- **Endpoints:**
+  - `POST /api/auth/register` → creates the user, **initialises the learning profile immediately**, returns a JWT + user. `409` if the email is taken.
+  - `POST /api/auth/login` → email + password → JWT + user. `401` on bad credentials.
+  - `GET /api/auth/me` → returns the current user (requires `Authorization: Bearer <token>`). `401` without/with an invalid token.
+- **Protected endpoints.** `/api/goal`, `/api/chat`, `/api/submit_code`, `/api/resume`, `/api/progress/*` and the `/ws` WebSocket all require a valid token. The `user_id` is always taken from the token (the request body `user_id` is ignored), so a client cannot act as another user. The WebSocket accepts the token via a `?token=` query param or an initial `{type:"auth",token}` message.
+- **Default application user.** At startup the backend seeds a default user from `APP_DEFAULT_USER_*` (defaults `admin@example.com` / `qwerty123456`, name `admin`, language `python`) with an initialised profile. This is both a ready login and a safeguard guaranteeing a valid `users` row exists. Override via `.env`. The login form pre-fills the email placeholder and shows the demo credentials as a hint (the password is **not** hard-coded in JS).
+- **Profile initialisation fixes the skill-progress FK.** Registration/login (and the start of every graph turn) call `ensure_user_profile(user_id, language)`, which get-or-creates the `users` row and seeds the first skill-progress rows. Combined with get-or-create semantics in the progress repository, this means a chat/code turn works **immediately after login**, even before `/api/goal` — the previous `skill_progress` foreign-key error can no longer occur.
+- **Frontend flow.** The app shows a **Login / Register** screen before the main UI. On success the JWT is stored in `localStorage` and attached as `Authorization: Bearer <token>` to every API call. On startup an existing token is validated via `GET /api/auth/me`. A **Log out** button clears the token; any `401` automatically logs the user out and returns to the auth screen.
 
 ### Runtime graph settings (no restart)
 

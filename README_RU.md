@@ -35,6 +35,7 @@ graph TD
 
     subgraph Backend
         API[FastAPI gateway REST and WebSocket]
+        AUTH[Auth layer JWT bcrypt get_current_user]
         ORCH[LangGraph orchestrator]
     end
 
@@ -66,6 +67,8 @@ graph TD
 
     WEB --> API
     EDITOR --> API
+    API --> AUTH
+    AUTH --> ORCH
     API --> ORCH
     ORCH --> LLM
     ORCH --> VDB
@@ -259,6 +262,17 @@ demo_ai_agent/
    LANGFUSE_INIT_USER_PASSWORD=qwerty123456
    ```
 
+   **Аутентификация приложения (JWT)** — у приложения-репетитора СВОЙ вход, отдельный от учётки admin в Langfuse. Дефолты работают «из коробки»; переопределяются в `.env`:
+   ```
+   JWT_SECRET=dev-insecure-change-me-in-production   # СМЕНИТЕ в продакшене
+   JWT_EXPIRE_MINUTES=10080                           # время жизни токена (7 дней)
+   # Дефолтный пользователь приложения, создаётся при старте бэкенда (вход в приложение):
+   APP_DEFAULT_USER_EMAIL=admin@example.com
+   APP_DEFAULT_USER_PASSWORD=qwerty123456
+   APP_DEFAULT_USER_NAME=admin
+   APP_DEFAULT_USER_LANGUAGE=python
+   ```
+
 2. Соберите образы и поднимите стек. Проверенный путь сборки обходит проблему DNS **EAI_AGAIN** в песочнице Docker-сборки (где `npm`/`PyPI` не могут резолвить реестры) за счёт использования BuildKit-сборщика с включённым DNS (конфигурация в [`buildkitd.toml`](buildkitd.toml:1)):
 
    ```bash
@@ -280,10 +294,24 @@ demo_ai_agent/
    Это запускает: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend`, а также **`langfuse`** и его отдельный Postgres **`langfuse-db`** — все с healthcheck'ами и упорядоченными `depends_on`. При первом запуске бэкенд создаёт таблицы, заполняет Skill Graph (Python + JavaScript), создаёт строку runtime-настроек графа и индексирует подготовленный контент RAG. Образы Langfuse и его Postgres подтягиваются готовыми (pull, сборка не нужна).
 
 3. Доступ к сервисам:
-   - **Frontend:** http://localhost:3000
+   - **Frontend:** http://localhost:3000 — сначала открывается **экран авторизации** (вход / регистрация). Войдите дефолтным пользователем `admin@example.com` / `qwerty123456`, после чего появится учебный интерфейс.
    - **API docs:** http://localhost:8000/docs
    - **Health:** http://localhost:8000/health
    - **Langfuse (UI трейсинга):** http://localhost:3001
+
+### Аутентификация (вход в приложение)
+
+У приложения-репетитора **собственная** JWT-аутентификация, полностью **отдельная от учётной записи admin в Langfuse** (у той свой вход, её мы не трогаем).
+
+- **Открытая регистрация, без верификации почты.** Любой может создать аккаунт через `POST /api/auth/register` (email, пароль, опц. имя и язык). Пароли хешируются **bcrypt** (passlib); возвращается подписанный **JWT**.
+- **Эндпоинты:**
+  - `POST /api/auth/register` → создаёт пользователя, **сразу инициализирует учебный профиль**, возвращает JWT + пользователя. `409`, если email занят.
+  - `POST /api/auth/login` → email + пароль → JWT + пользователь. `401` при неверных кредах.
+  - `GET /api/auth/me` → текущий пользователь (нужен `Authorization: Bearer <token>`). `401` без токена или с битым токеном.
+- **Защищённые эндпоинты.** `/api/goal`, `/api/chat`, `/api/submit_code`, `/api/resume`, `/api/progress/*` и WebSocket `/ws` требуют валидный токен. `user_id` всегда берётся из токена (поле `user_id` в теле запроса игнорируется), так что клиент не может действовать от чужого имени. WebSocket принимает токен через query-параметр `?token=` либо первое сообщение `{type:"auth",token}`.
+- **Дефолтный пользователь приложения.** При старте бэкенд засевает дефолтного пользователя из `APP_DEFAULT_USER_*` (по умолчанию `admin@example.com` / `qwerty123456`, имя `admin`, язык `python`) с инициализированным профилем. Это и готовый вход, и страховка, гарантирующая наличие валидной строки `users`. Переопределяется в `.env`. Форма входа подставляет email-плейсхолдер и показывает демо-креды как подсказку (пароль **не** захардкожен в JS).
+- **Инициализация профиля устраняет FK-ошибку skill_progress.** Регистрация/логин (и начало каждого хода графа) вызывают `ensure_user_profile(user_id, language)`, который get-or-create создаёт строку `users` и сеет первые записи skill_progress. В сочетании с get-or-create-семантикой в репозитории прогресса это значит, что чат/код работают **сразу после входа**, ещё до `/api/goal` — прежняя FK-ошибка `skill_progress` больше не возникает.
+- **Поток на фронтенде.** Перед основным UI показывается экран **Вход / Регистрация**. При успехе JWT сохраняется в `localStorage` и прикрепляется как `Authorization: Bearer <token>` ко всем вызовам API. При старте имеющийся токен проверяется через `GET /api/auth/me`. Кнопка **Выйти** очищает токен; любой `401` автоматически разлогинивает и возвращает на экран авторизации.
 
 ### Runtime-настройки графа (без перезапуска)
 

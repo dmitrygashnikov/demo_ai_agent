@@ -15,8 +15,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from app.auth.deps import authenticate_token
 from app.graph.runner import resume_turn, run_turn
 
 logger = logging.getLogger(__name__)
@@ -26,12 +27,43 @@ ws_router = APIRouter()
 
 @ws_router.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
+    # Authenticate the socket. The token may come as a ?token=... query param or
+    # as the first message {type: "auth", token: ...}. The resolved user id is
+    # then used for EVERY turn — clients cannot spoof another user_id in the body.
     await websocket.accept()
+
+    token = websocket.query_params.get("token")
+    auth_user = authenticate_token(token) if token else None
+
+    if auth_user is None:
+        # Allow an initial auth message before closing.
+        try:
+            first = await websocket.receive_json()
+        except Exception:  # noqa: BLE001
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        if first.get("type") == "auth":
+            auth_user = authenticate_token(first.get("token"))
+        if auth_user is None:
+            await websocket.send_json(
+                {"type": "error", "message": "Unauthorized: invalid or missing token"}
+            )
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        else:
+            await websocket.send_json({"type": "auth_ok"})
+
+    authed_user_id = auth_user["id"]
+
     try:
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type", "chat")
-            user_id = data.get("user_id", "anon")
+            if msg_type == "auth":
+                # Re-auth / keepalive — already authenticated.
+                continue
+            # Always use the authenticated user id (ignore any body user_id).
+            user_id = authed_user_id
             session_id = data.get("session_id", "default")
 
             if msg_type == "resume":
