@@ -101,10 +101,12 @@ export async function sendChat(sessionId, message) {
   });
 }
 
-export async function submitCode(sessionId, code) {
+export async function submitCode(sessionId, code, taskId) {
   return apiFetch("/api/submit_code", {
     method: "POST",
-    body: { session_id: sessionId, code },
+    // Include the current task id when known so the backend can recover the
+    // active task even if its checkpointed session state was lost.
+    body: { session_id: sessionId, code, task_id: taskId || null },
   });
 }
 
@@ -129,4 +131,31 @@ export async function updateGraphSettings(values) {
 
 export async function getMetricsSummary() {
   return apiFetch("/api/metrics/summary", { auth: false });
+}
+
+// ----------------------------- Topic / theme -----------------------------
+// Free-form THEME ("тематика") that biases generated tasks + web-search
+// queries. Orthogonal to language/skill — switching it never resets progress.
+
+// Suggested themes for the dropdown (public, fail-open: returns [] on error).
+export async function getTopics() {
+  try {
+    const data = await apiFetch("/api/topics", { auth: false });
+    return data?.topics || [];
+  } catch {
+    return [];
+  }
+}
+
+// Current user's persisted theme → { topic: string | null }.
+export async function getTopic() {
+  return apiFetch("/api/topic");
+}
+
+// Set/clear the theme (empty string clears it) → { topic: string | null }.
+export async function setTopic(topic) {
+  return apiFetch("/api/topic", {
+    method: "PUT",
+    body: { topic: topic || "" },
+  });
 }

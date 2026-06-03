@@ -15,6 +15,7 @@ import re
 
 from app.graph.state import TutorState
 from app.llm.client import LLMUnavailable, chat
+from app.tasks.repository import tasks_for_skill
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,27 @@ def _format_context(context: list) -> str:
         tc = f" ({c['timecode']})" if c.get("timecode") else ""
         lines.append(f"- {src}{url}{tc}: {c.get('text', '')[:300]}")
     return "\n".join(lines)
+
+
+def _exercise_suggestion(state: TutorState) -> str:
+    """Suggest a concrete practice exercise to follow a theory answer.
+
+    Theory questions should return useful info AND a practice exercise. The
+    question branch doesn't serve a task node, so we nudge the student towards
+    one they can request, preferring a skill that actually has tasks.
+    """
+    skill_id = state.get("current_skill", "")
+    if skill_id and tasks_for_skill(skill_id):
+        return (
+            "\n\n---\n**Practice exercise:** ready to apply this? Ask me for a task "
+            "(say \"give me a task\") and I'll serve a hands-on exercise for this "
+            "skill, then run your code against tests."
+        )
+    return (
+        "\n\n---\n**Practice exercise:** want to apply this? Tell me what you want "
+        "to learn (e.g. \"I want to learn Python loops\") and I'll set up a "
+        "hands-on exercise you can run against tests."
+    )
 
 
 def answer_generator(state: TutorState) -> dict:
@@ -84,4 +106,6 @@ def answer_generator(state: TutorState) -> dict:
             "next_action": "self_execute",
         }
 
+    # Theory answers should also point the student at a practice exercise.
+    answer = answer + _exercise_suggestion(state)
     return {"agent_response": answer, "next_action": "respond"}

@@ -1,11 +1,18 @@
 """WebSocket endpoint for streaming tutor turns.
 
 Protocol (JSON messages):
-  client → {type: "chat"|"code"|"goal"|"resume", user_id, session_id, text/code/answer, language?}
+  client → {type: "chat"|"code"|"goal"|"resume", user_id, session_id, text/code/answer, language?, topic?}
+            {type: "topic", topic}            (convenience: persist the theme only)
   server → {type: "token", text}            (incremental, where applicable)
             {type: "interrupt", question}     (human-in-the-loop)
             {type: "final", response, state}  (turn complete)
+            {type: "topic_ok", topic}         (theme persisted)
             {type: "error", message}
+
+The optional ``topic`` (free-form theme, Group E) may ride along on any
+goal/chat/code message; it is threaded into ``run_turn`` so generated tasks +
+web-search queries are themed. When omitted, ``run_turn`` falls back to the
+user's persisted ``User.topic``, so the theme survives across turns.
 
 For simplicity the graph runs synchronously per turn; the final answer is also
 streamed token-by-token for a responsive UI.
@@ -65,6 +72,22 @@ async def ws_endpoint(websocket: WebSocket):
             # Always use the authenticated user id (ignore any body user_id).
             user_id = authed_user_id
             session_id = data.get("session_id", "default")
+            # Optional free-form theme (Group E). May ride along on any turn;
+            # ``None`` lets run_turn fall back to the persisted User.topic.
+            topic = data.get("topic")
+
+            if msg_type == "topic":
+                # Convenience: persist the theme without running a turn.
+                try:
+                    from app.db.progress_repo import set_user_topic
+
+                    stored = await asyncio.to_thread(
+                        set_user_topic, user_id, data.get("topic")
+                    )
+                    await websocket.send_json({"type": "topic_ok", "topic": stored})
+                except Exception as exc:  # noqa: BLE001
+                    await websocket.send_json({"type": "error", "message": str(exc)})
+                continue
 
             if msg_type == "resume":
                 result = await asyncio.to_thread(
@@ -72,16 +95,18 @@ async def ws_endpoint(websocket: WebSocket):
                 )
             elif msg_type == "code":
                 result = await asyncio.to_thread(
-                    run_turn, user_id, session_id, "", data.get("code", ""), None
+                    run_turn, user_id, session_id, "", data.get("code", ""),
+                    None, None, topic,
                 )
             elif msg_type == "goal":
                 result = await asyncio.to_thread(
                     run_turn, user_id, session_id, data.get("text", ""),
-                    None, data.get("language"),
+                    None, data.get("language"), None, topic,
                 )
             else:  # chat
                 result = await asyncio.to_thread(
-                    run_turn, user_id, session_id, data.get("text", "")
+                    run_turn, user_id, session_id, data.get("text", ""),
+                    None, None, None, topic,
                 )
 
             if result.get("interrupted"):

@@ -69,5 +69,9 @@ def code_validator(state: TutorState) -> dict:
         "execution_result": exec_dict,
         "current_skill": task.skill_id,
         "solve_count": solve_count,
+        # ``last_passed`` drives the Run & Check de-duplication (req. 1, Group C):
+        # on PASS the just-solved task is not re-stated; on FAIL the failure path
+        # adds remediation links/excerpt.
+        "last_passed": result.success,
         "next_action": "passed" if result.success else "failed",
     }

@@ -103,3 +103,59 @@ button.secondary { background: #2a2f40; }
 .user-name { font-weight: 600; font-size: 14px; word-break: break-all; }
 .user-email { margin-top: 2px; word-break: break-all; }
 .logout-btn { margin-top: 10px; width: 100%; padding: 8px; font-size: 13px; }
+
+/* Topic / theme selector (editor toolbar second row) */
+.topic-toolbar {
+  display: flex; gap: 8px; padding: 8px; background: #161922;
+  align-items: center; flex-wrap: wrap; border-top: 1px solid #242838;
+}
+.topic-label { font-weight: 600; }
+.topic-select, .topic-input {
+  background: #0f1117; color: #e6e6e6; border: 1px solid #2a2f40;
+  padding: 6px; border-radius: 6px; font-size: 13px;
+}
+.topic-input { flex: 1; min-width: 120px; }
+.topic-set { padding: 6px 12px; font-size: 13px; }
+.topic-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #6f42c133; border: 1px solid #6f42c188; color: #d6bcfa;
+  padding: 3px 8px; border-radius: 12px; font-size: 12px; max-width: 100%;
+}
+.topic-clear {
+  background: transparent; color: #d6bcfa; border: none; padding: 0 2px;
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.topic-clear:hover { background: transparent; color: #fff; }
+
+/* Structured message metadata (badges, remediation links/excerpt, next cue) */
+.msg-meta { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.badge {
+  align-self: flex-start; font-size: 11px; padding: 2px 8px;
+  border-radius: 10px; font-weight: 600;
+}
+.badge.source-generated { background: #6f42c133; border: 1px solid #6f42c188; color: #d6bcfa; }
+.badge.source-curated { background: #1f8b4c33; border: 1px solid #1f8b4c66; color: #7ee2a8; }
+
+.excerpt-panel {
+  background: #1a1d2a; border: 1px solid #2a2f40;
+  border-left: 3px solid #b08a00; border-radius: 6px; padding: 8px 10px;
+}
+.excerpt-title { font-size: 12px; font-weight: 600; color: #e0c870; margin-bottom: 4px; }
+.excerpt-body { font-size: 13px; line-height: 1.45; }
+
+.links-panel {
+  background: #1a1d2a; border: 1px solid #2a2f40; border-radius: 6px;
+  padding: 8px 10px;
+}
+.links-title { font-size: 12px; font-weight: 600; color: #58a6ff; margin-bottom: 6px; }
+.links-list { margin: 0; padding-left: 18px; }
+.links-list li { margin-bottom: 6px; }
+.links-list a { color: #58a6ff; text-decoration: none; }
+.links-list a:hover { text-decoration: underline; }
+.link-snippet { margin-top: 2px; line-height: 1.4; }
+
+.next-task-cue {
+  align-self: flex-start; font-size: 12px; color: #7ee2a8;
+  background: #1f8b4c22; border: 1px solid #1f8b4c55;
+  padding: 3px 10px; border-radius: 10px;
+}

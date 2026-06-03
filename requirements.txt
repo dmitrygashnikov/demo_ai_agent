@@ -37,6 +37,12 @@ docker==7.1.0
 httpx==0.28.1
 tenacity==9.0.0
 
+# --- Web search (SearXNG MCP client; req. 3 internet tasks + remediation) ---
+# Official MCP Python SDK — backend connects to the in-repo SearXNG MCP server
+# over Streamable HTTP. Pinned to match searxng-mcp/requirements.txt. Optional /
+# fail-open: a direct SearXNG HTTP fallback is used if MCP is unavailable.
+mcp==1.12.4
+
 # --- Observability (optional LangGraph tracing via Langfuse) ---
 langfuse==2.59.7
 

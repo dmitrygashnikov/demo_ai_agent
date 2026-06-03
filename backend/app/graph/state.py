@@ -26,6 +26,28 @@ class TutorState(TypedDict, total=False):
     retrieved_context: list
     execution_result: dict | None
 
+    # Internet-tasks (req. 3, Group B). ``topic`` is the active free-form theme
+    # biasing generation/search (read here; the topic switch API/UI is Group E).
+    # ``task_source`` records provenance ("curated" | "generated") for the just-
+    # served task.
+    topic: str
+    task_source: str  # "curated" | "generated"
+
+    # Run & Check de-duplication + failure remediation (req. 1, Group C).
+    #   ``last_passed`` — whether the most recent code submission passed; drives
+    #     the PASS de-duplication (the just-solved task is not re-stated).
+    #   ``remediation_links`` — [{title, url, snippet}] videos/articles fetched
+    #     via the fail-open web-search client on the FAILURE path.
+    #   ``remediation_excerpt`` — short plain-language explanation of the
+    #     error/topic derived from those links (LLM-distilled or snippet-only).
+    #   ``offer_next_task`` — set True by the success path (Group D) to mark that
+    #     a success should explicitly offer the next task; declared here so the
+    #     channel exists and is surfaced through the runner payload.
+    last_passed: bool | None
+    remediation_links: list
+    remediation_excerpt: str
+    offer_next_task: bool
+
     # Self-execution loop bookkeeping
     generated_code: str | None
     generated_entry_point: str | None

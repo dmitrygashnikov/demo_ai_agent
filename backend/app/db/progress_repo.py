@@ -164,6 +164,32 @@ def get_solve_count(user_id: str) -> int:
         return user.solve_count if user else 0
 
 
+def get_user_topic(user_id: str) -> str | None:
+    """Return the user's persisted free-form theme/topic, or None.
+
+    Used to thread ``topic`` into the next graph turn (Group E) so generated
+    tasks + web-search queries are themed. Fail-soft: a missing user row simply
+    yields ``None`` (neutral behaviour).
+    """
+    with get_session() as session:
+        user = session.get(User, user_id)
+        return getattr(user, "topic", None) if user else None
+
+
+def set_user_topic(user_id: str, topic: str | None) -> str | None:
+    """Persist the user's free-form theme/topic. Empty string clears it (None).
+
+    Orthogonal to language/skill: switching topic NEVER touches skill_progress,
+    so the adaptive trajectory is preserved — it only themes future generated
+    tasks. Returns the normalised stored value (``None`` when cleared).
+    """
+    normalised = (topic or "").strip() or None
+    with get_session() as session:
+        user = _ensure_user_row(session, user_id)
+        user.topic = normalised
+        return normalised
+
+
 def get_or_create_progress(user_id: str, skill_id: str) -> dict:
     with get_session() as session:
         # FK safety: ensure the parent users row exists before inserting a

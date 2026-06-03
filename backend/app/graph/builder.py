@@ -34,6 +34,7 @@ from app.graph.nodes.self_execution import self_execution
 from app.graph.nodes.skill_path import skill_path_builder
 from app.graph.nodes.task_selector import task_selector
 from app.graph.nodes.topic_guard import topic_guard
+from app.graph.nodes.web_search import web_search_node
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ def build_graph(checkpointer):
     g.add_node("self_execution", self_execution)
     g.add_node("code_validator", code_validator)
     g.add_node("error_classifier", error_classifier)
+    g.add_node("web_search_node", web_search_node)
     g.add_node("remediation_planner", remediation_planner)
     g.add_node("progress_updater", progress_updater)
     g.add_node("adaptivity_engine", adaptivity_engine)
@@ -144,7 +146,11 @@ def build_graph(checkpointer):
         route_adaptivity,
         {"task_selector": "task_selector", "respond": "respond"},
     )
-    g.add_edge("error_classifier", "remediation_planner")
+    # Failure path: classify → fetch remediation links/excerpt (web_search) →
+    # plan remediation. ``web_search_node`` is strictly fail-open and always
+    # routes onward to ``remediation_planner`` (Group C, plan §4.3).
+    g.add_edge("error_classifier", "web_search_node")
+    g.add_edge("web_search_node", "remediation_planner")
     g.add_edge("remediation_planner", "task_selector")
 
     # Terminal nodes

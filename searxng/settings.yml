@@ -1,0 +1,73 @@
+# ==========================================================================
+# SearXNG configuration for the Adaptive AI Coding Tutor.
+#
+# Purpose: self-hosted meta-search used (via the SearXNG MCP server, with a
+# direct-HTTP fallback) to fetch remediation links and to ground internet-
+# sourced task generation. Fully OPTIONAL / fail-open: if SearXNG is down the
+# tutor keeps working (no links / curated tasks).
+#
+# CRITICAL: the `json` output format MUST stay enabled below — both the MCP
+# server and the direct fallback client parse `format=json`. Without it they
+# would receive HTML and break (the single most common integration pitfall).
+#
+# Mounted read-only at /etc/searxng/settings.yml (see docker-compose.yml).
+# ==========================================================================
+
+use_default_settings: true
+
+general:
+  instance_name: "tutor-search"
+  # Hide the donation/contact prompts; this is an internal embedded instance.
+  contact_url: false
+  enable_metrics: false
+
+search:
+  # Output formats the instance is allowed to return. `json` is REQUIRED for
+  # the MCP server / direct fallback client to parse results programmatically.
+  formats:
+    - html
+    - json
+  # Reasonable defaults for an embedded, programmatic instance.
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+
+server:
+  # Secret key for the instance. Sourced from the SEARXNG_SECRET env var so it
+  # can be overridden per-deployment via .env (see .env.example).
+  secret_key: "${SEARXNG_SECRET}"
+  # This is a trusted, internal-only instance on the compose network; disable
+  # the public-instance rate limiter so programmatic queries are not throttled.
+  limiter: false
+  image_proxy: false
+  # Allow the MCP server / backend (any compose-network origin) to call the API.
+  http_protocol_version: "1.0"
+
+ui:
+  static_use_hash: true
+
+# --------------------------------------------------------------------------
+# Engines: keep a small, curated set of fast, NO-API-KEY general engines and
+# disable rate-limit-prone or key-requiring ones. This keeps the instance
+# reliable for unattended programmatic use.
+# --------------------------------------------------------------------------
+engines:
+  - name: duckduckgo
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: wikipedia
+    disabled: false
+  - name: google
+    # Google frequently rate-limits scraping; disabled for reliability.
+    disabled: true
+  - name: startpage
+    disabled: true
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 10.0
+  pool_connections: 100
+  pool_maxsize: 20

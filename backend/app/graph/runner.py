@@ -42,11 +42,18 @@ def run_turn(
     user_message: str,
     submitted_code: str | None = None,
     language: str | None = None,
+    task_id: str | None = None,
+    topic: str | None = None,
 ) -> dict:
     """Run one conversational turn. Returns a dict with response + metadata.
 
     If the graph interrupts (e.g. goal clarification), returns
     {"interrupted": True, "question": ...} so the caller can ask the student.
+
+    ``topic`` (Group E) is the free-form theme that biases generated tasks +
+    web-search queries. When not explicitly supplied for this turn, the user's
+    persisted ``User.topic`` is loaded so the theme survives across turns
+    without the client having to resend it. Empty/None = neutral behaviour.
     """
     graph = get_graph()
 
@@ -61,6 +68,18 @@ def run_turn(
             ensure_user_profile(user_id, language)
         except Exception:  # noqa: BLE001
             logger.debug("ensure_user_profile failed (non-fatal)", exc_info=True)
+
+    # Resolve the active theme: an explicit per-turn topic wins; otherwise fall
+    # back to the user's persisted theme. Fail-open — if the lookup fails the
+    # turn proceeds with no topic (today's neutral behaviour).
+    resolved_topic = topic
+    if resolved_topic is None and user_id:
+        try:
+            from app.db.progress_repo import get_user_topic
+
+            resolved_topic = get_user_topic(user_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("get_user_topic failed (non-fatal)", exc_info=True)
 
     config = _config(
         session_id,
@@ -77,6 +96,15 @@ def run_turn(
     }
     if language:
         state_in["language"] = language
+    # Thread the resolved free-form theme into the turn so task_selector /
+    # web_search (Groups B/C/D) can bias generation + search. Always set it
+    # (even to "") so a cleared topic overwrites a stale checkpointed value.
+    if resolved_topic is not None:
+        state_in["topic"] = resolved_topic
+    # A self-describing submission can carry its task id so the validator can
+    # recover the active task if the checkpoint lost it.
+    if task_id:
+        state_in["current_task_id"] = task_id
 
     try:
         result = graph.invoke(state_in, config=config)
@@ -122,5 +150,15 @@ def _interpret(result: dict) -> dict:
             "last_error_type": result.get("last_error_type"),
             "execution_result": result.get("execution_result"),
             "solve_count": result.get("solve_count"),
+            # Internet-tasks provenance + theme (Group B/E).
+            "topic": result.get("topic"),
+            "task_source": result.get("task_source"),
+            # Run & Check de-dup + failure remediation (req. 1, Group C). These
+            # ride along automatically through REST/WS so the frontend (Group E)
+            # can render the links list + explanation panel and the next-task cue.
+            "last_passed": result.get("last_passed"),
+            "offer_next_task": result.get("offer_next_task"),
+            "remediation_links": result.get("remediation_links"),
+            "remediation_excerpt": result.get("remediation_excerpt"),
         },
     }

@@ -55,6 +55,60 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
+  # SearXNG self-hosted meta-search + in-repo SearXNG MCP server.
+  # Used to fetch remediation links and to ground internet-sourced task
+  # generation. Fully OPTIONAL / fail-open: the backend never depends_on these
+  # as service_healthy (only service_started), so the stack still runs when
+  # search is unavailable (no links / curated tasks only).
+  # ---------------------------------------------------------------------------
+  searxng:
+    # Pinned dated tag (NOT :latest) for reproducible offline builds. The image
+    # is pulled, not built. Bump the tag deliberately when upgrading.
+    # NOTE: the originally-planned tag 2024.12.10-cc59cf0 is no longer published
+    # on Docker Hub (manifest unknown); pinned to the closest reachable recent
+    # stable dated release verified during the rebuild/verification step.
+    image: searxng/searxng:2026.5.31-7159b8aed
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-changeme-searxng-secret}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - searxngdata:/var/cache/searxng
+    # Host port is optional and only useful for debugging the JSON API directly:
+    #   curl "http://localhost:8080/search?q=python+loops&format=json"
+    # ports:
+    #   - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  searxng-mcp:
+    # Built from ./searxng-mcp via the DNS-enabled buildx builder, e.g.:
+    #   docker buildx --builder dnsbuilder build --load \
+    #     -t demo_ai_agent-searxng-mcp:latest ./searxng-mcp
+    image: demo_ai_agent-searxng-mcp:latest
+    build:
+      context: ./searxng-mcp
+    environment:
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+      MCP_HTTP_PORT: ${SEARXNG_MCP_PORT:-8077}
+    depends_on:
+      searxng:
+        condition: service_healthy
+    # Internal only; expose for debugging the MCP endpoint if desired:
+    # ports:
+    #   - "8077:8077"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8077/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
   # Langfuse self-hosted (LLM/agent observability & tracing).
   # Uses its OWN dedicated Postgres (langfuse-db) — NOT the application postgres.
   # Tracing is OPTIONAL: the backend never depends_on Langfuse and degrades
@@ -87,6 +141,10 @@ services:
       SALT: ${LANGFUSE_SALT:-changeme-salt}
       NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3001}
       TELEMETRY_ENABLED: "false"
+      # Disable the UI release/update check (public.checkUpdate tRPC route) which
+      # periodically fetches the latest GitHub releases. In offline/egress-blocked
+      # environments that outbound fetch fails and logs repeated (non-fatal) errors.
+      LANGFUSE_UI_RELEASE_CHECK_ENABLED: "false"
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
       # Auto-provision an organisation, project, default admin user and API keys
       # on first boot so the admin can log in AND tracing works out-of-the-box
@@ -120,6 +178,10 @@ services:
       QDRANT_HOST: qdrant
       REDIS_HOST: redis
       CODE_EXECUTOR_URL: http://code-executor:9000
+      # Web search (SearXNG via the SearXNG MCP server) — OPTIONAL / fail-open.
+      SEARXNG_URL: http://searxng:8080
+      SEARXNG_MCP_URL: http://searxng-mcp:8077
+      INTERNET_TASKS_ENABLED: ${INTERNET_TASKS_ENABLED:-true}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
       # Application JWT auth + default application user (separate from Langfuse).
       # Defaults make the stack work out-of-the-box; override in .env.
@@ -145,6 +207,12 @@ services:
         condition: service_healthy
       code-executor:
         condition: service_healthy
+      # Search is OPTIONAL and fail-open: use service_started (NOT service_healthy)
+      # so the backend still boots even if SearXNG / the MCP server are down.
+      searxng:
+        condition: service_started
+      searxng-mcp:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
@@ -170,3 +238,4 @@ volumes:
   pgdata:
   qdrantdata:
   langfusedbdata:
+  searxngdata:

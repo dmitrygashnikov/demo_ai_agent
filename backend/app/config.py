@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     EXECUTION_TIMEOUT_SECONDS: int = 10
     EXECUTION_MEMORY_MB: int = 256
 
+    # --- Web search (SearXNG via SearXNG MCP server) ---
+    # Fully optional and fail-open: if these services are unavailable the tutor
+    # still works (no remediation links / curated tasks only). The MCP server is
+    # the primary path; the direct SearXNG URL is the fallback. INTERNET_TASKS
+    # is the master switch for live, sandbox-verified task generation.
+    SEARXNG_URL: str = "http://searxng:8080"
+    SEARXNG_MCP_URL: str = "http://searxng-mcp:8077"
+    INTERNET_TASKS_ENABLED: bool = True
+
     # --- Adaptive behaviour ---
     COOLDOWN_SOLVES: int = 500
     MAX_REGEN_ATTEMPTS: int = 3
@@ -108,6 +117,15 @@ class Settings(BaseSettings):
     def langfuse_enabled(self) -> bool:
         """True only when both Langfuse keys are configured."""
         return bool(self.LANGFUSE_PUBLIC_KEY and self.LANGFUSE_SECRET_KEY)
+
+    @property
+    def search_enabled(self) -> bool:
+        """True when a SearXNG endpoint (MCP or direct) is configured.
+
+        Search is always fail-open at the call site; this only reflects whether
+        an endpoint is set at all.
+        """
+        return bool(self.SEARXNG_MCP_URL or self.SEARXNG_URL)
 
 
 @lru_cache

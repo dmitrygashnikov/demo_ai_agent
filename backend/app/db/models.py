@@ -46,6 +46,11 @@ class User(Base):
     # Optional human-readable display name.
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     preferred_language: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Active free-form THEME ("тематика", e.g. "data analysis with pandas").
+    # Orthogonal to language and skill: it only biases generated-task flavour and
+    # web-search queries. NULL/empty = neutral (today's behaviour). The DB column
+    # is owned by Group B (schema); the topic switch API/UI is Group E.
+    topic: Mapped[str | None] = mapped_column(String, nullable=True)
     # Total number of code solutions the student has submitted. Drives the
     # task-uniqueness cooldown counter.
     solve_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -158,3 +163,39 @@ class GraphSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+class GeneratedTask(Base):
+    """A live-generated, sandbox-verified coding task (req. 3).
+
+    Mirrors the curated task schema (prompt + visible/hidden tests + reference
+    solution) so a generated task is a drop-in for ``tasks.repository.Task``.
+    Persisting to Postgres gives durability: a generated task served by one
+    worker can still be resolved by ``get_task(task_id)`` on a later Run & Check
+    handled by a different worker / after a restart. The in-process cache lives
+    in ``app.tasks.dynamic_store``; this table is the source of truth.
+
+    Generated ids use the ``gen_<uuid>`` prefix so they never collide with the
+    static curated ids and so provenance is obvious in logs / serve history.
+    """
+
+    __tablename__ = "generated_tasks"
+
+    # e.g. "gen_<uuid>". Addressable exactly like a curated task id.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    language: Mapped[str] = mapped_column(String, nullable=False)
+    concept: Mapped[str] = mapped_column(String, default="", nullable=False)
+    skill_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    difficulty: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    kind: Mapped[str] = mapped_column(String, default="practice", nullable=False)
+    entry_point: Mapped[str] = mapped_column(String, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    reference_solution: Mapped[str] = mapped_column(Text, nullable=False)
+    visible_tests: Mapped[list] = mapped_column(JSON, default=list)
+    hidden_tests: Mapped[list] = mapped_column(JSON, default=list)
+    # Free-form theme this task was generated for (may be NULL/empty = neutral).
+    topic: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The user the task was generated for (audit/provenance; not a hard FK so a
+    # generated task survives even if the user row is later removed).
+    created_by: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

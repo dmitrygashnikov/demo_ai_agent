@@ -38,6 +38,7 @@ def adaptivity_engine(state: TutorState) -> dict:
     )
 
     # Already mastered + sustained success → escalate to real-world cases.
+    # A follow-up (advanced/real-world) task IS being offered → flag it (Group D).
     if skill_state in ("mastered", "advanced") and successes >= advanced_streak:
         if user_id:
             update_progress(user_id, skill_id, state="advanced")
@@ -45,7 +46,9 @@ def adaptivity_engine(state: TutorState) -> dict:
         return {
             "skill_state": "advanced",
             "difficulty_level": min(5, difficulty + 1),
-            "agent_response": base_msg + "\n\n🚀 You're on a roll — here's a real-world case to stretch you.",
+            "agent_response": base_msg
+            + "\n\n🚀 You're on a roll — here's a real-world case to stretch you.",
+            "offer_next_task": True,
             "next_action": "select_task",
         }
 
@@ -55,26 +58,34 @@ def adaptivity_engine(state: TutorState) -> dict:
             update_progress(user_id, skill_id, state="mastered", mastery=1.0)
         nxt = next_skill(skill_id)
         if nxt is None:
+            # Trajectory exhausted — no next task to offer. Degrade gracefully
+            # with a completion message and clear the offer flag (Group D).
             return {
                 "skill_state": "mastered",
-                "agent_response": base_msg + "\n\n🎓 You've completed the whole track for this language. Outstanding!",
+                "agent_response": base_msg
+                + "\n\n🎓 You've completed the whole track for this language. Outstanding!",
+                "offer_next_task": False,
                 "next_action": "respond",
             }
         logger.info("Skill=%s mastered → next=%s", skill_id, nxt.id)
+        # Mastery → next skill: a follow-up task on the new skill is offered.
         return {
             "current_skill": nxt.id,
             "skill_state": "introducing",
             "difficulty_level": 1,
             "consecutive_successes": 0,
-            "agent_response": base_msg + f"\n\n🎉 Skill mastered! Moving on to **{nxt.name}**.",
+            "agent_response": base_msg
+            + f"\n\n🎉 Skill mastered! Moving on to **{nxt.name}**.",
+            "offer_next_task": True,
             "next_action": "select_task",
         }
 
-    # Keep practicing, nudge difficulty up slightly.
+    # Keep practicing, nudge difficulty up slightly — a next task is offered.
     logger.info("Continue practicing skill=%s (streak=%d)", skill_id, successes)
     return {
         "skill_state": "practicing",
         "difficulty_level": min(5, difficulty + 1),
         "agent_response": base_msg + "\n\nNice — let's keep the momentum with another task.",
+        "offer_next_task": True,
         "next_action": "select_task",
     }

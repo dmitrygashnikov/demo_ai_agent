@@ -54,7 +54,23 @@ _TASKS: dict[str, Task] = {t["id"]: _make_task(t) for t in TASKS}
 
 
 def get_task(task_id: str) -> Task | None:
-    return _TASKS.get(task_id)
+    """Resolve a task id: static curated tasks first, then the dynamic store.
+
+    Generated tasks (``gen_<uuid>``) live in ``app.tasks.dynamic_store`` (a
+    process cache backed by Postgres). The dynamic lookup is fail-open: any
+    error there returns ``None`` so a missing generated task degrades to "no
+    active task" rather than crashing a Run & Check. Imported lazily to avoid a
+    circular import (dynamic_store imports ``Task`` from this module).
+    """
+    task = _TASKS.get(task_id)
+    if task is not None:
+        return task
+    try:
+        from app.tasks.dynamic_store import get_generated_task
+
+        return get_generated_task(task_id)
+    except Exception:  # noqa: BLE001 — fail-open resolution
+        return None
 
 
 def tasks_for_skill(

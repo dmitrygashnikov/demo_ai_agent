@@ -197,4 +197,462 @@ TASKS = [
         "visible_tests": [{"args": [[1, 2, 3, 4]], "expected": 2}],
         "hidden_tests": [{"args": [[2, 4, 6]], "expected": 3}],
     },
+    # -----------------------------------------------------------------------
+    # Early-skill practice coverage. One practice task per concept for BOTH
+    # languages so the adaptive trajectory never starts on an empty skill.
+    # Every reference_solution is sandbox-verifiable against its own tests.
+    # -----------------------------------------------------------------------
+    # ---- Python: variables ----
+    {
+        "id": "py_variables_swap",
+        "language": "python",
+        "concept": "variables",
+        "skill_id": "py_variables",
+        "difficulty": 1,
+        "kind": "practice",
+        "entry_point": "swap",
+        "prompt": "Write swap(a, b) that returns a list [b, a] — the two values in swapped order.",
+        "reference_solution": "def swap(a, b):\n    return [b, a]\n",
+        "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
+        "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}, {"args": [0, 0], "expected": [0, 0]}],
+    },
+    # ---- Python: io ----
+    {
+        "id": "py_io_greet",
+        "language": "python",
+        "concept": "io",
+        "skill_id": "py_io",
+        "difficulty": 1,
+        "kind": "practice",
+        "entry_point": "greet",
+        "prompt": "Write greet(name) that returns the string 'Hello, <name>!' (e.g. greet('Sam') -> 'Hello, Sam!').",
+        "reference_solution": "def greet(name):\n    return 'Hello, ' + name + '!'\n",
+        "visible_tests": [{"args": ["Sam"], "expected": "Hello, Sam!"}],
+        "hidden_tests": [{"args": ["Ada"], "expected": "Hello, Ada!"}, {"args": [""], "expected": "Hello, !"}],
+    },
+    # ---- Python: functions ----
+    {
+        "id": "py_functions_square",
+        "language": "python",
+        "concept": "functions",
+        "skill_id": "py_functions",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "square",
+        "prompt": "Write square(x) that returns x multiplied by itself.",
+        "reference_solution": "def square(x):\n    return x * x\n",
+        "visible_tests": [{"args": [4], "expected": 16}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [7], "expected": 49}],
+    },
+    # ---- Python: collections ----
+    {
+        "id": "py_collections_total",
+        "language": "python",
+        "concept": "collections",
+        "skill_id": "py_collections",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "list_sum",
+        "prompt": "Write list_sum(nums) that returns the sum of all numbers in the list nums (0 for an empty list).",
+        "reference_solution": "def list_sum(nums):\n    total = 0\n    for x in nums:\n        total += x\n    return total\n",
+        "visible_tests": [{"args": [[1, 2, 3]], "expected": 6}],
+        "hidden_tests": [{"args": [[]], "expected": 0}, {"args": [[10, -5]], "expected": 5}],
+    },
+    # ---- Python: dicts ----
+    {
+        "id": "py_dicts_get_or_zero",
+        "language": "python",
+        "concept": "dicts",
+        "skill_id": "py_dicts",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "get_or_zero",
+        "prompt": "Write get_or_zero(d, key) that returns d[key] if key is present, otherwise 0.",
+        "reference_solution": "def get_or_zero(d, key):\n    return d.get(key, 0)\n",
+        "visible_tests": [{"args": [{"a": 1}, "a"], "expected": 1}],
+        "hidden_tests": [{"args": [{"a": 1}, "b"], "expected": 0}, {"args": [{}, "x"], "expected": 0}],
+    },
+    # ---- Python: strings ----
+    {
+        "id": "py_strings_reverse",
+        "language": "python",
+        "concept": "strings",
+        "skill_id": "py_strings",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "reverse",
+        "prompt": "Write reverse(s) that returns the string s reversed.",
+        "reference_solution": "def reverse(s):\n    return s[::-1]\n",
+        "visible_tests": [{"args": ["abc"], "expected": "cba"}],
+        "hidden_tests": [{"args": [""], "expected": ""}, {"args": ["racecar"], "expected": "racecar"}],
+    },
+    # ---- Python: errors ----
+    {
+        "id": "py_errors_safe_div",
+        "language": "python",
+        "concept": "errors",
+        "skill_id": "py_errors",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "safe_div",
+        "prompt": "Write safe_div(a, b) that returns a / b, but returns None if b is 0 (handle the error).",
+        "reference_solution": "def safe_div(a, b):\n    try:\n        return a / b\n    except ZeroDivisionError:\n        return None\n",
+        "visible_tests": [{"args": [10, 2], "expected": 5.0}],
+        "hidden_tests": [{"args": [1, 0], "expected": None}, {"args": [9, 3], "expected": 3.0}],
+    },
+    # ---- Python: oop ----
+    {
+        "id": "py_oop_counter",
+        "language": "python",
+        "concept": "oop",
+        "skill_id": "py_oop",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "counter_after",
+        "prompt": (
+            "Write a class Counter with a method inc() that increases an internal count "
+            "(starting at 0) by 1, and a function counter_after(n) that creates a Counter, "
+            "calls inc() n times, and returns the final count."
+        ),
+        "reference_solution": (
+            "class Counter:\n"
+            "    def __init__(self):\n"
+            "        self.count = 0\n"
+            "    def inc(self):\n"
+            "        self.count += 1\n\n"
+            "def counter_after(n):\n"
+            "    c = Counter()\n"
+            "    for _ in range(n):\n"
+            "        c.inc()\n"
+            "    return c.count\n"
+        ),
+        "visible_tests": [{"args": [3], "expected": 3}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [10], "expected": 10}],
+    },
+    # ---- Python: comprehensions ----
+    {
+        "id": "py_comprehensions_squares",
+        "language": "python",
+        "concept": "comprehensions",
+        "skill_id": "py_comprehensions",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "squares",
+        "prompt": "Write squares(n) that returns a list of the squares of 0..n-1 using a list comprehension.",
+        "reference_solution": "def squares(n):\n    return [i * i for i in range(n)]\n",
+        "visible_tests": [{"args": [4], "expected": [0, 1, 4, 9]}],
+        "hidden_tests": [{"args": [1], "expected": [0]}, {"args": [0], "expected": []}],
+    },
+    # ---- Python: recursion ----
+    {
+        "id": "py_recursion_fib",
+        "language": "python",
+        "concept": "recursion",
+        "skill_id": "py_recursion",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "fib",
+        "prompt": "Write fib(n) that returns the n-th Fibonacci number recursively. fib(0)==0, fib(1)==1.",
+        "reference_solution": "def fib(n):\n    if n < 2:\n        return n\n    return fib(n - 1) + fib(n - 2)\n",
+        "visible_tests": [{"args": [6], "expected": 8}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [10], "expected": 55}],
+    },
+    # ---- Python: modules ----
+    {
+        "id": "py_modules_sqrt",
+        "language": "python",
+        "concept": "modules",
+        "skill_id": "py_modules",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "hypotenuse",
+        "prompt": (
+            "Import the math module and write hypotenuse(a, b) that returns "
+            "math.sqrt(a*a + b*b) as a float."
+        ),
+        "reference_solution": "import math\n\ndef hypotenuse(a, b):\n    return math.sqrt(a * a + b * b)\n",
+        "visible_tests": [{"args": [3, 4], "expected": 5.0}],
+        "hidden_tests": [{"args": [6, 8], "expected": 10.0}, {"args": [0, 0], "expected": 0.0}],
+    },
+    # ---- Python: api ----
+    {
+        "id": "py_api_build_url",
+        "language": "python",
+        "concept": "api",
+        "skill_id": "py_api",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "build_url",
+        "prompt": (
+            "When calling APIs you often build query strings. Write build_url(base, params) "
+            "that appends params (a dict) to base as 'base?k1=v1&k2=v2', keys in the dict's "
+            "insertion order. If params is empty, return base unchanged."
+        ),
+        "reference_solution": (
+            "def build_url(base, params):\n"
+            "    if not params:\n"
+            "        return base\n"
+            "    query = '&'.join(str(k) + '=' + str(v) for k, v in params.items())\n"
+            "    return base + '?' + query\n"
+        ),
+        "visible_tests": [{"args": ["http://x", {"a": 1, "b": 2}], "expected": "http://x?a=1&b=2"}],
+        "hidden_tests": [{"args": ["http://x", {}], "expected": "http://x"}, {"args": ["u", {"q": "hi"}], "expected": "u?q=hi"}],
+    },
+    # ---- Python: project ----
+    {
+        "id": "py_project_word_count",
+        "language": "python",
+        "concept": "project",
+        "skill_id": "py_project",
+        "difficulty": 5,
+        "kind": "practice",
+        "entry_point": "word_count",
+        "prompt": (
+            "Mini project: write word_count(text) that returns the number of "
+            "whitespace-separated words in text (0 for an empty/blank string)."
+        ),
+        "reference_solution": "def word_count(text):\n    return len(text.split())\n",
+        "visible_tests": [{"args": ["hello world"], "expected": 2}],
+        "hidden_tests": [{"args": [""], "expected": 0}, {"args": ["  a  b  c "], "expected": 3}],
+    },
+    # ---- JavaScript: variables ----
+    {
+        "id": "js_variables_swap",
+        "language": "javascript",
+        "concept": "variables",
+        "skill_id": "js_variables",
+        "difficulty": 1,
+        "kind": "practice",
+        "entry_point": "swap",
+        "prompt": "Write swap(a, b) that returns an array [b, a] — the two values in swapped order.",
+        "reference_solution": "function swap(a, b) {\n  return [b, a];\n}\n",
+        "visible_tests": [{"args": [1, 2], "expected": [2, 1]}],
+        "hidden_tests": [{"args": [9, 4], "expected": [4, 9]}, {"args": [0, 0], "expected": [0, 0]}],
+    },
+    # ---- JavaScript: io ----
+    {
+        "id": "js_io_greet",
+        "language": "javascript",
+        "concept": "io",
+        "skill_id": "js_io",
+        "difficulty": 1,
+        "kind": "practice",
+        "entry_point": "greet",
+        "prompt": "Write greet(name) that returns the string 'Hello, <name>!' (e.g. greet('Sam') -> 'Hello, Sam!').",
+        "reference_solution": "function greet(name) {\n  return 'Hello, ' + name + '!';\n}\n",
+        "visible_tests": [{"args": ["Sam"], "expected": "Hello, Sam!"}],
+        "hidden_tests": [{"args": ["Ada"], "expected": "Hello, Ada!"}, {"args": [""], "expected": "Hello, !"}],
+    },
+    # ---- JavaScript: conditions ----
+    {
+        "id": "js_cond_max2",
+        "language": "javascript",
+        "concept": "conditions",
+        "skill_id": "js_conditions",
+        "difficulty": 1,
+        "kind": "practice",
+        "entry_point": "max2",
+        "prompt": "Write max2(a, b) returning the larger of two numbers.",
+        "reference_solution": "function max2(a, b) {\n  return a > b ? a : b;\n}\n",
+        "visible_tests": [{"args": [3, 7], "expected": 7}],
+        "hidden_tests": [{"args": [9, 2], "expected": 9}, {"args": [5, 5], "expected": 5}],
+    },
+    # ---- JavaScript: functions ----
+    {
+        "id": "js_functions_square",
+        "language": "javascript",
+        "concept": "functions",
+        "skill_id": "js_functions",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "square",
+        "prompt": "Write square(x) that returns x multiplied by itself.",
+        "reference_solution": "function square(x) {\n  return x * x;\n}\n",
+        "visible_tests": [{"args": [4], "expected": 16}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [7], "expected": 49}],
+    },
+    # ---- JavaScript: collections ----
+    {
+        "id": "js_collections_total",
+        "language": "javascript",
+        "concept": "collections",
+        "skill_id": "js_collections",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "listSum",
+        "prompt": "Write listSum(nums) that returns the sum of all numbers in the array nums (0 for an empty array).",
+        "reference_solution": "function listSum(nums) {\n  let total = 0;\n  for (const x of nums) total += x;\n  return total;\n}\n",
+        "visible_tests": [{"args": [[1, 2, 3]], "expected": 6}],
+        "hidden_tests": [{"args": [[]], "expected": 0}, {"args": [[10, -5]], "expected": 5}],
+    },
+    # ---- JavaScript: dicts (objects) ----
+    {
+        "id": "js_dicts_get_or_zero",
+        "language": "javascript",
+        "concept": "dicts",
+        "skill_id": "js_dicts",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "getOrZero",
+        "prompt": "Write getOrZero(obj, key) that returns obj[key] if the key exists, otherwise 0.",
+        "reference_solution": "function getOrZero(obj, key) {\n  return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : 0;\n}\n",
+        "visible_tests": [{"args": [{"a": 1}, "a"], "expected": 1}],
+        "hidden_tests": [{"args": [{"a": 1}, "b"], "expected": 0}, {"args": [{}, "x"], "expected": 0}],
+    },
+    # ---- JavaScript: strings ----
+    {
+        "id": "js_strings_reverse",
+        "language": "javascript",
+        "concept": "strings",
+        "skill_id": "js_strings",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "reverse",
+        "prompt": "Write reverse(s) that returns the string s reversed.",
+        "reference_solution": "function reverse(s) {\n  return s.split('').reverse().join('');\n}\n",
+        "visible_tests": [{"args": ["abc"], "expected": "cba"}],
+        "hidden_tests": [{"args": [""], "expected": ""}, {"args": ["racecar"], "expected": "racecar"}],
+    },
+    # ---- JavaScript: errors ----
+    {
+        "id": "js_errors_safe_parse",
+        "language": "javascript",
+        "concept": "errors",
+        "skill_id": "js_errors",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "safeParse",
+        "prompt": (
+            "Write safeParse(s) that returns the parsed JSON value of string s, "
+            "or null if s is not valid JSON (use try/catch)."
+        ),
+        "reference_solution": "function safeParse(s) {\n  try {\n    return JSON.parse(s);\n  } catch (e) {\n    return null;\n  }\n}\n",
+        "visible_tests": [{"args": ["[1, 2]"], "expected": [1, 2]}],
+        "hidden_tests": [{"args": ["not json"], "expected": None}, {"args": ["42"], "expected": 42}],
+    },
+    # ---- JavaScript: oop ----
+    {
+        "id": "js_oop_counter",
+        "language": "javascript",
+        "concept": "oop",
+        "skill_id": "js_oop",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "counterAfter",
+        "prompt": (
+            "Write a class Counter with a method inc() that increases an internal count "
+            "(starting at 0) by 1, and a function counterAfter(n) that creates a Counter, "
+            "calls inc() n times, and returns the final count."
+        ),
+        "reference_solution": (
+            "class Counter {\n"
+            "  constructor() {\n"
+            "    this.count = 0;\n"
+            "  }\n"
+            "  inc() {\n"
+            "    this.count += 1;\n"
+            "  }\n"
+            "}\n\n"
+            "function counterAfter(n) {\n"
+            "  const c = new Counter();\n"
+            "  for (let i = 0; i < n; i++) c.inc();\n"
+            "  return c.count;\n"
+            "}\n"
+        ),
+        "visible_tests": [{"args": [3], "expected": 3}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [10], "expected": 10}],
+    },
+    # ---- JavaScript: comprehensions (functional map) ----
+    {
+        "id": "js_comprehensions_squares",
+        "language": "javascript",
+        "concept": "comprehensions",
+        "skill_id": "js_comprehensions",
+        "difficulty": 3,
+        "kind": "practice",
+        "entry_point": "squares",
+        "prompt": "Write squares(n) that returns an array of the squares of 0..n-1 using Array.from/map.",
+        "reference_solution": "function squares(n) {\n  return Array.from({ length: n }, (_, i) => i * i);\n}\n",
+        "visible_tests": [{"args": [4], "expected": [0, 1, 4, 9]}],
+        "hidden_tests": [{"args": [1], "expected": [0]}, {"args": [0], "expected": []}],
+    },
+    # ---- JavaScript: recursion ----
+    {
+        "id": "js_recursion_fib",
+        "language": "javascript",
+        "concept": "recursion",
+        "skill_id": "js_recursion",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "fib",
+        "prompt": "Write fib(n) that returns the n-th Fibonacci number recursively. fib(0)==0, fib(1)==1.",
+        "reference_solution": "function fib(n) {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n",
+        "visible_tests": [{"args": [6], "expected": 8}],
+        "hidden_tests": [{"args": [0], "expected": 0}, {"args": [10], "expected": 55}],
+    },
+    # ---- JavaScript: modules ----
+    {
+        "id": "js_modules_hypotenuse",
+        "language": "javascript",
+        "concept": "modules",
+        "skill_id": "js_modules",
+        "difficulty": 2,
+        "kind": "practice",
+        "entry_point": "hypotenuse",
+        "prompt": (
+            "Use the built-in Math object and write hypotenuse(a, b) that returns "
+            "Math.sqrt(a*a + b*b)."
+        ),
+        "reference_solution": "function hypotenuse(a, b) {\n  return Math.sqrt(a * a + b * b);\n}\n",
+        "visible_tests": [{"args": [3, 4], "expected": 5}],
+        "hidden_tests": [{"args": [6, 8], "expected": 10}, {"args": [0, 0], "expected": 0}],
+    },
+    # ---- JavaScript: api ----
+    {
+        "id": "js_api_build_url",
+        "language": "javascript",
+        "concept": "api",
+        "skill_id": "js_api",
+        "difficulty": 4,
+        "kind": "practice",
+        "entry_point": "buildUrl",
+        "prompt": (
+            "When calling APIs you often build query strings. Write buildUrl(base, params) "
+            "that appends params (an object) to base as 'base?k1=v1&k2=v2', keys in insertion "
+            "order. If params has no keys, return base unchanged."
+        ),
+        "reference_solution": (
+            "function buildUrl(base, params) {\n"
+            "  const keys = Object.keys(params);\n"
+            "  if (keys.length === 0) return base;\n"
+            "  const query = keys.map((k) => k + '=' + params[k]).join('&');\n"
+            "  return base + '?' + query;\n"
+            "}\n"
+        ),
+        "visible_tests": [{"args": ["http://x", {"a": 1, "b": 2}], "expected": "http://x?a=1&b=2"}],
+        "hidden_tests": [{"args": ["http://x", {}], "expected": "http://x"}, {"args": ["u", {"q": "hi"}], "expected": "u?q=hi"}],
+    },
+    # ---- JavaScript: project ----
+    {
+        "id": "js_project_word_count",
+        "language": "javascript",
+        "concept": "project",
+        "skill_id": "js_project",
+        "difficulty": 5,
+        "kind": "practice",
+        "entry_point": "wordCount",
+        "prompt": (
+            "Mini project: write wordCount(text) that returns the number of "
+            "whitespace-separated words in text (0 for an empty/blank string)."
+        ),
+        "reference_solution": (
+            "function wordCount(text) {\n"
+            "  const trimmed = text.trim();\n"
+            "  if (trimmed === '') return 0;\n"
+            "  return trimmed.split(/\\s+/).length;\n"
+            "}\n"
+        ),
+        "visible_tests": [{"args": ["hello world"], "expected": 2}],
+        "hidden_tests": [{"args": [""], "expected": 0}, {"args": ["  a  b  c "], "expected": 3}],
+    },
 ]

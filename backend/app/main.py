@@ -41,6 +41,15 @@ def _startup_seed() -> None:
             conn.execute(
                 text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR")
             )
+            # Free-form THEME ("тематика") column (Group B owns the model; the
+            # topic switch API/UI is Group E). create_all does NOT add a column
+            # to a pre-existing users table, so mirror settings_store's
+            # idempotent ADD COLUMN IF NOT EXISTS for in-place upgrades. On a
+            # `docker compose down -v` rebuild create_all already adds it; this
+            # makes upgrades on an existing volume safe too.
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS topic VARCHAR")
+            )
             conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email "

@@ -9,7 +9,12 @@ from sqlalchemy import func, select
 
 from app.auth.deps import get_current_user
 from app.db.models import Attempt, SkillProgress, TaskServeHistory, User
-from app.db.progress_repo import get_or_create_user, get_solve_count
+from app.db.progress_repo import (
+    get_or_create_user,
+    get_solve_count,
+    get_user_topic,
+    set_user_topic,
+)
 from app.db.session import get_session
 from app.db.skill_graph import skills_for_language
 from app.graph.runner import resume_turn, run_turn
@@ -40,6 +45,12 @@ class CodeRequest(BaseModel):
     user_id: str | None = None
     session_id: str
     code: str
+    # Optional self-describing context so a submission can recover the active
+    # task even if the checkpointer lost it (robustness for the "no active
+    # task" dead-end).
+    task_id: str | None = None
+    skill: str | None = None
+    language: str | None = None
 
 
 class ResumeRequest(BaseModel):
@@ -57,6 +68,39 @@ class GraphSettingsUpdate(BaseModel):
     TOPIC_GUARD_ENABLED: bool | None = None
 
 
+class TopicUpdate(BaseModel):
+    """Set the user's free-form theme ("тематика").
+
+    ``session_id`` is accepted for symmetry with the other tutor calls (the
+    plan's PUT /api/topic body is ``{session_id, topic}``) but the user is
+    always taken from the token. ``topic`` may be empty/None to clear the theme
+    (return to neutral curated behaviour).
+    """
+
+    session_id: str | None = None
+    topic: str | None = None
+
+
+# Static suggested themes for the UI dropdown. The field itself stays
+# FREE-FORM — these are only convenience starting points. Switching topic is
+# orthogonal to language/skill and never resets progress; it only themes the
+# flavour of generated tasks + web-search queries.
+SUGGESTED_TOPICS: list[str] = [
+    "data analysis with pandas",
+    "web scraping",
+    "automation scripts",
+    "game development basics",
+    "financial calculations",
+    "text processing",
+    "algorithms and data structures",
+    "API integration",
+]
+
+
+# Max accepted topic length (keeps the column/prompt sane; fail-soft validation).
+_MAX_TOPIC_LEN = 120
+
+
 @router.post("/goal")
 def set_goal(req: GoalRequest, current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
@@ -72,7 +116,12 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
 @router.post("/submit_code")
 def submit_code(req: CodeRequest, current_user: dict = Depends(get_current_user)):
     return run_turn(
-        current_user["id"], req.session_id, user_message="", submitted_code=req.code
+        current_user["id"],
+        req.session_id,
+        user_message="",
+        submitted_code=req.code,
+        language=req.language,
+        task_id=req.task_id,
     )
 
 
@@ -143,6 +192,71 @@ def put_graph_settings(req: GraphSettingsUpdate):
         return update_runtime_settings(updates)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/topics")
+def get_topics():
+    """Return suggested theme strings for the UI dropdown (Group E).
+
+    Public/unauthenticated (no user data) and fail-open: a static list, so the
+    selector always has options even if everything else is degraded. The field
+    remains free-form — these are only convenience suggestions.
+    """
+    return {"topics": SUGGESTED_TOPICS}
+
+
+@router.get("/topic")
+def get_topic(current_user: dict = Depends(get_current_user)):
+    """Return the authenticated user's current free-form theme.
+
+    Response: ``{"topic": str | None}`` (None/empty = neutral). Fail-soft: any
+    lookup error degrades to ``{"topic": None}`` so the UI still loads.
+    """
+    try:
+        return {"topic": get_user_topic(current_user["id"])}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("get_topic failed: %s", exc)
+        return {"topic": None}
+
+
+@router.put("/topic")
+def put_topic(req: TopicUpdate, current_user: dict = Depends(get_current_user)):
+    """Set/clear the authenticated user's free-form theme (Group E).
+
+    Body: ``{session_id?, topic}`` (user from token). An empty/None ``topic``
+    clears the theme. Persists to the ``users`` row; the next turn threads it
+    into the graph (via ``run_turn`` loading ``User.topic``) so generated tasks
+    + search queries are themed. Switching topic NEVER resets skill progress.
+
+    Response: ``{"topic": str | None}`` (the normalised stored value).
+    """
+    topic = (req.topic or "").strip()
+    if len(topic) > _MAX_TOPIC_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Topic too long (max {_MAX_TOPIC_LEN} characters)",
+        )
+    stored = set_user_topic(current_user["id"], topic)
+    return {"topic": stored}
+
+
+@router.get("/search/health")
+def search_health_endpoint():
+    """Best-effort diagnostic of the web-search paths (req. 3, Group B).
+
+    Returns ``{mcp: bool, searxng: bool}``. Each probe is independently
+    fail-open: a ``False`` only means that path did not return usable results
+    just now. Search is optional, so this never affects normal operation.
+    Public/unauthenticated to match the other diagnostic endpoints
+    (``/metrics/summary``, ``/uniqueness/audit``).
+    """
+    try:
+        from app.search import search_health
+
+        return search_health()
+    except Exception as exc:  # noqa: BLE001 — diagnostic must never 500
+        logger.warning("search health probe failed: %s", exc)
+        return {"mcp": False, "searxng": False}
 
 
 @router.get("/uniqueness/audit")

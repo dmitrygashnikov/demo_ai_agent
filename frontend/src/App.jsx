@@ -8,9 +8,12 @@ import {
   getMetricsSummary,
   getProgress,
   getToken,
+  getTopic,
+  getTopics,
   resume as resumeApi,
   sendChat,
   setGoal,
+  setTopic,
   setUnauthorizedHandler,
   submitCode,
   updateGraphSettings,
@@ -225,6 +228,56 @@ function GraphSettingsPanel() {
   );
 }
 
+// Renders the structured fields the backend now returns alongside an assistant
+// message (Groups C/D/E surfacing): a task-source badge, the failure
+// remediation explanation + web links, and a subtle next-task cue on success.
+// All fields are optional and fail-open — nothing renders when absent.
+function MessageMeta({ meta }) {
+  if (!meta) return null;
+  const { task_source, remediation_excerpt, remediation_links, offer_next_task } = meta;
+  const links = Array.isArray(remediation_links) ? remediation_links : [];
+  const hasAnything =
+    task_source || remediation_excerpt || links.length > 0 || offer_next_task;
+  if (!hasAnything) return null;
+
+  return (
+    <div className="msg-meta">
+      {task_source && (
+        <span className={"badge source-" + task_source} title="Task provenance">
+          {task_source === "generated" ? "✨ generated" : "📚 curated"}
+        </span>
+      )}
+
+      {remediation_excerpt && (
+        <div className="excerpt-panel">
+          <div className="excerpt-title">💡 Explanation</div>
+          <div className="excerpt-body">{remediation_excerpt}</div>
+        </div>
+      )}
+
+      {links.length > 0 && (
+        <div className="links-panel">
+          <div className="links-title">🔗 Helpful resources</div>
+          <ul className="links-list">
+            {links.map((l, i) => (
+              <li key={i}>
+                <a href={l.url} target="_blank" rel="noreferrer">
+                  {l.title || l.url}
+                </a>
+                {l.snippet && <div className="muted link-snippet">{l.snippet}</div>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {offer_next_task && (
+        <div className="next-task-cue">➡️ Next task ready below</div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [sessionId] = useState(() => localStorage.getItem("sid") || uid());
   const [tab, setTab] = useState("tutor"); // "tutor" | "settings"
@@ -245,8 +298,17 @@ export default function App() {
   const [code, setCode] = useState("def sum_to_n(n):\n    # your code here\n    return 0\n");
   const [skills, setSkills] = useState([]);
   const [solveCount, setSolveCount] = useState(0);
+  // Track the active task id served by the backend so code submissions can be
+  // self-describing (lets the backend recover the task if its session state
+  // was lost).
+  const [currentTaskId, setCurrentTaskId] = useState(null);
   const [pendingInterrupt, setPendingInterrupt] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Topic / theme ("тематика") — free-form, orthogonal to language/skill.
+  const [topic, setTopicState] = useState("");        // current persisted theme
+  const [topicDraft, setTopicDraft] = useState("");    // free-text input buffer
+  const [topicSuggestions, setTopicSuggestions] = useState([]);
+  const [topicSaving, setTopicSaving] = useState(false);
   const endRef = useRef(null);
 
   // Force logout (used both by the button and on any 401 from the API layer).
@@ -294,7 +356,10 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
-    if (authUser) refreshProgress();
+    if (authUser) {
+      refreshProgress();
+      loadTopic();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser]);
 
@@ -308,8 +373,50 @@ export default function App() {
     }
   }
 
-  function pushMsg(role, content) {
-    setMessages((m) => [...m, { role, content }]);
+  // Load the persisted theme + suggestion list. Fully fail-open: any failure
+  // leaves the UI working with no topic (neutral behaviour).
+  async function loadTopic() {
+    try {
+      const sugg = await getTopics();
+      setTopicSuggestions(sugg || []);
+    } catch {
+      /* suggestions are best-effort */
+    }
+    try {
+      const data = await getTopic();
+      const t = data?.topic || "";
+      setTopicState(t);
+      setTopicDraft(t);
+    } catch {
+      /* topic fetch best-effort */
+    }
+  }
+
+  // Persist a new theme (empty string clears it). Used by both the dropdown
+  // and the free-text input.
+  async function applyTopic(next) {
+    if (topicSaving) return;
+    setTopicSaving(true);
+    try {
+      const data = await setTopic(next);
+      const t = data?.topic || "";
+      setTopicState(t);
+      setTopicDraft(t);
+      pushMsg(
+        "assistant",
+        t
+          ? `🎨 Theme set to "${t}". New tasks will be themed accordingly.`
+          : "🎨 Theme cleared — back to neutral tasks."
+      );
+    } catch (e) {
+      pushMsg("assistant", "Could not set theme: " + e.message);
+    } finally {
+      setTopicSaving(false);
+    }
+  }
+
+  function pushMsg(role, content, meta) {
+    setMessages((m) => [...m, { role, content, meta }]);
   }
 
   function handleResult(res) {
@@ -318,8 +425,24 @@ export default function App() {
       pushMsg("assistant", "❓ " + res.question);
     } else {
       setPendingInterrupt(false);
-      pushMsg("assistant", res.response || "(no response)");
-      if (res.state?.language) setLanguage(res.state.language);
+      // Attach the structured payload fields so MessageMeta can render the
+      // task-source badge, remediation links/excerpt and the next-task cue.
+      const s = res.state || {};
+      pushMsg("assistant", res.response || "(no response)", {
+        task_source: s.task_source,
+        remediation_excerpt: s.remediation_excerpt,
+        remediation_links: s.remediation_links,
+        offer_next_task: s.offer_next_task,
+      });
+      if (s.language) setLanguage(s.language);
+      // Keep the local theme in sync if the backend echoes it.
+      if (typeof s.topic === "string") {
+        setTopicState(s.topic);
+        setTopicDraft(s.topic);
+      }
+      // Remember the latest served task so subsequent code submissions can
+      // carry it back to the backend.
+      if (s.current_task_id) setCurrentTaskId(s.current_task_id);
     }
     refreshProgress();
   }
@@ -352,7 +475,7 @@ export default function App() {
     pushMsg("user", "```" + language + "\n" + code + "\n```");
     setBusy(true);
     try {
-      const res = await submitCode(sessionId, code);
+      const res = await submitCode(sessionId, code, currentTaskId);
       handleResult(res);
       if (res.state?.execution_result) {
         const er = res.state.execution_result;
@@ -440,6 +563,7 @@ export default function App() {
                 {messages.map((m, i) => (
                   <div key={i} className={"msg " + m.role}>
                     {m.content}
+                    {m.role === "assistant" && <MessageMeta meta={m.meta} />}
                   </div>
                 ))}
                 {busy && <div className="msg assistant muted">…thinking</div>}
@@ -466,6 +590,51 @@ export default function App() {
                 <button className="secondary" onClick={onRunCode} disabled={busy}>
                   Run &amp; Check
                 </button>
+              </div>
+
+              <div className="topic-toolbar">
+                <span className="muted topic-label">Theme</span>
+                <select
+                  className="topic-select"
+                  value={topicSuggestions.includes(topic) ? topic : ""}
+                  disabled={topicSaving}
+                  onChange={(e) => applyTopic(e.target.value)}
+                >
+                  <option value="">— neutral —</option>
+                  {topicSuggestions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="topic-input"
+                  placeholder="custom theme…"
+                  value={topicDraft}
+                  disabled={topicSaving}
+                  onChange={(e) => setTopicDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyTopic(topicDraft)}
+                />
+                <button
+                  className="secondary topic-set"
+                  disabled={topicSaving}
+                  onClick={() => applyTopic(topicDraft)}
+                >
+                  Set
+                </button>
+                {topic && (
+                  <span className="topic-chip" title="Active theme">
+                    🎨 {topic}
+                    <button
+                      className="topic-clear"
+                      title="Clear theme"
+                      disabled={topicSaving}
+                      onClick={() => applyTopic("")}
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
               </div>
               <Editor
                 height="100%"
