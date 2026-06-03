@@ -40,6 +40,7 @@ class TutorState(TypedDict, total=False):
     intent: str
     agent_response: str
     next_action: str
+    off_topic: bool  # set by topic_guard when the message is off-topic
     pending_question: str | None  # human-in-the-loop clarification
     messages: Annotated[list, add_messages]
 

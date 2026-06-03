@@ -5,9 +5,9 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.db.models import SkillProgress
+from app.db.models import Attempt, SkillProgress, TaskServeHistory, User
 from app.db.progress_repo import get_or_create_user, get_solve_count
 from app.db.session import get_session
 from app.db.skill_graph import skills_for_language
@@ -51,6 +51,7 @@ class GraphSettingsUpdate(BaseModel):
     MAX_REGEN_ATTEMPTS: int | None = None
     MASTERY_SUCCESS_STREAK: int | None = None
     ADVANCED_SUCCESS_STREAK: int | None = None
+    TOPIC_GUARD_ENABLED: bool | None = None
 
 
 @router.post("/goal")
@@ -138,4 +139,72 @@ def uniqueness_audit(user_id: str, task_id: str):
         "task_id": task_id,
         "solve_count": sc,
         "would_violate_cooldown": violates_cooldown(user_id, task_id, sc),
+    }
+
+
+@router.get("/metrics/summary")
+def metrics_summary():
+    """Aggregate backend metrics from the application database.
+
+    Complements the per-trace metrics (latency/volume/errors) that Langfuse
+    already provides for the LangGraph runs. Returns counts and distributions
+    computed live from the current ORM models (users, attempts, skill
+    progress, task-serve history) — no extra storage required.
+    """
+    from app.config import settings as app_settings
+
+    with get_session() as session:
+        users = session.execute(select(func.count(User.id))).scalar() or 0
+        total_solves = session.execute(
+            select(func.coalesce(func.sum(User.solve_count), 0))
+        ).scalar() or 0
+
+        attempts = session.execute(select(func.count(Attempt.id))).scalar() or 0
+        successes = session.execute(
+            select(func.count(Attempt.id)).where(Attempt.success.is_(True))
+        ).scalar() or 0
+        failures = attempts - successes
+
+        avg_mastery = session.execute(
+            select(func.coalesce(func.avg(SkillProgress.mastery), 0.0))
+        ).scalar() or 0.0
+
+        tasks_served = session.execute(
+            select(func.count(TaskServeHistory.id))
+        ).scalar() or 0
+
+        # Distribution of skill progress states.
+        state_rows = session.execute(
+            select(SkillProgress.state, func.count(SkillProgress.id)).group_by(
+                SkillProgress.state
+            )
+        ).all()
+        states = {state: int(count) for state, count in state_rows}
+
+        # Distribution of error types among failed attempts.
+        error_rows = session.execute(
+            select(Attempt.error_type, func.count(Attempt.id))
+            .where(Attempt.success.is_(False))
+            .group_by(Attempt.error_type)
+        ).all()
+        error_types = {(etype or "unknown"): int(count) for etype, count in error_rows}
+
+    success_rate = round(successes / attempts, 4) if attempts else 0.0
+
+    return {
+        "users": int(users),
+        "total_solves": int(total_solves),
+        "attempts": int(attempts),
+        "successes": int(successes),
+        "failures": int(failures),
+        "success_rate": success_rate,
+        "avg_mastery": round(float(avg_mastery), 4),
+        "tasks_served": int(tasks_served),
+        "skill_states": states,
+        "error_types": error_types,
+        "langfuse": {
+            "enabled": app_settings.langfuse_enabled,
+            "ui_url": "http://localhost:3001",
+            "host": app_settings.LANGFUSE_HOST,
+        },
     }

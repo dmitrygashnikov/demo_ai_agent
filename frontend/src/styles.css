@@ -63,3 +63,7 @@ button.secondary { background: #2a2f40; }
 .settings-langfuse h3 { font-size: 15px; margin-bottom: 8px; }
 .settings-langfuse a { color: #58a6ff; text-decoration: none; display: inline-block; margin-bottom: 6px; }
 .settings-langfuse a:hover { text-decoration: underline; }
+.settings-row input[type="checkbox"] { width: 18px; height: 18px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; max-width: 520px; }
+.metric { background: #1c2030; border: 1px solid #242838; border-radius: 8px; padding: 10px; text-align: center; }
+.metric-value { font-size: 20px; font-weight: 700; color: #e6e6e6; }

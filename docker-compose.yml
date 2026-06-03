@@ -88,15 +88,17 @@ services:
       NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3001}
       TELEMETRY_ENABLED: "false"
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
-      # Auto-provision an organisation, project, user and API keys on first boot
-      # so tracing can work out-of-the-box once you copy the keys into .env.
+      # Auto-provision an organisation, project, default admin user and API keys
+      # on first boot so the admin can log in AND tracing works out-of-the-box
+      # (the same keys are passed to the backend below). Override any of these
+      # via .env. The admin login defaults to admin@example.com / qwerty123456.
       LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-tutor-org}
       LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-tutor-project}
-      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-tutor-public-key}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-tutor-secret-key}
       LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
-      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Admin}
-      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme123}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-admin}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-qwerty123456}
     healthcheck:
       # Langfuse binds to the container's external interface (not loopback), so
       # the healthcheck targets the container's own IP via $(hostname -i).
@@ -119,6 +121,11 @@ services:
       REDIS_HOST: redis
       CODE_EXECUTOR_URL: http://code-executor:9000
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
+      # Use the SAME keys the Langfuse project was provisioned with above, so
+      # graph tracing into the admin project is enabled out-of-the-box. These
+      # override any empty values coming from .env.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-tutor-public-key}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-tutor-secret-key}
     ports:
       - "8000:8000"
     depends_on:

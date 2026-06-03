@@ -81,15 +81,19 @@ graph TD
     LF --> LFDB
 ```
 
-> **Runtime-настройки графа.** Четыре адаптивных параметра (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) редактируются в рантайме через `GET/PUT /api/graph/settings` и вкладку UI **Graph Settings** — применяются **без перезапуска бэкенда**. Источник истины — Postgres; Redis (`graph:settings`) — write-through кеш.
+> **Runtime-настройки графа.** Адаптивные параметры (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) **и переключатель on-topic guardrail `TOPIC_GUARD_ENABLED`** редактируются в рантайме через `GET/PUT /api/graph/settings` и вкладку UI **Graph Settings** — применяются **без перезапуска бэкенда**. Источник истины — Postgres; Redis (`graph:settings`) — write-through кеш.
 
-> **Наблюдаемость (опционально).** Прогоны LangGraph трассируются в **self-hosted Langfuse** (со своим отдельным Postgres `langfuse-db`, UI на http://localhost:3001) через Langfuse `CallbackHandler`. Трейсинг полностью опционален: без заданных ключей бэкенд работает обычным образом и никогда не зависит от Langfuse.
+> **On-topic guardrail.** Узел `topic_guard` выполняется первым (сразу после входа, до Intent Router) и удерживает диалог в рамках программирования и текущего процесса обучения. Используется **гибридный классификатор**: быстрая детерминированная эвристика (ключевые слова программирования + активные `language`/`current_skill`/`learning_goal` студента) и, только для неоднозначных случаев, LLM-классификатор (`chat_json`). Поведение **fail-open**: если LLM недоступен — по умолчанию считаем on-topic (с логированием), чтобы временный сбой не блокировал обучение. Отправка кода (intent=code) всегда on-topic. Запросы не по теме вежливо отклоняются (без RAG и без исполнения). Гард управляется флагом `TOPIC_GUARD_ENABLED` (по умолчанию `true`); чтобы отключить — выставьте `false` (в env как seed или через UI Graph Settings / PUT settings) в рантайме.
+
+> **Наблюдаемость (включена из коробки).** Прогоны LangGraph (узлы + вызовы LLM) трассируются в **self-hosted Langfuse** (со своим отдельным Postgres `langfuse-db`, UI на http://localhost:3001) через Langfuse `CallbackHandler`. `docker-compose` автоматически создаёт организацию, проект и **дефолтного пользователя admin** в Langfuse и пробрасывает **те же ключи проекта** в бэкенд, поэтому трейсинг работает без ручной настройки. Это по-прежнему best-effort: если Langfuse недоступен — бэкенд работает нормально. Агрегированные метрики бэкенда (пользователи, попытки, доля успеха, средний mastery, …) доступны через `GET /api/metrics/summary` и показываются во вкладке **Graph Settings → Observability**.
 
 ### 2.2 Поток управления LangGraph
 
 ```mermaid
 graph TD
-    START([Student message]) --> ROUTER{Intent Router}
+    START([Student message]) --> GUARD{Topic Guard on-topic}
+    GUARD -->|off-topic| RESPOND[Respond]
+    GUARD -->|on-topic| ROUTER{Intent Router}
 
     ROUTER -->|new or changed goal| GOAL[Goal Planner with interrupt]
     ROUTER -->|theory question| RETRIEVE[RAG Retriever]
@@ -236,11 +240,23 @@ demo_ai_agent/
    ```
    Опционально включите онлайн-исполнение кода через RapidAPI, дополнительно задав `RAPIDAPI_KEY` и `RAPIDAPI_CODERUNNER_HOST` (иначе автоматически используется локальный контейнер `code-executor`).
 
-   Опционально включите **трейсинг Langfuse** (по умолчанию выключен) — оставьте пустым, чтобы отключить:
+   On-topic guardrail (задаёт начальное значение по умолчанию; также редактируется в рантайме):
    ```
-   LANGFUSE_PUBLIC_KEY=          # из проекта в Langfuse UI (http://localhost:3001)
-   LANGFUSE_SECRET_KEY=
+   TOPIC_GUARD_ENABLED=true      # вежливо отклонять запросы не по теме; fail-open без LLM
+   ```
+
+   **Трейсинг Langfuse включён из коробки.** Оставьте ключи пустыми, чтобы
+   использовать встроенные дефолты compose (`pk-lf-tutor-public-key` /
+   `sk-lf-tutor-secret-key`), которыми также провижинится проект Langfuse;
+   задайте свои значения, чтобы переопределить:
+   ```
+   LANGFUSE_PUBLIC_KEY=          # пусто → дефолт compose (pk-lf-tutor-public-key)
+   LANGFUSE_SECRET_KEY=          # пусто → дефолт compose (sk-lf-tutor-secret-key)
    LANGFUSE_HOST=http://langfuse:3000   # внутренний адрес в сети compose
+   # Дефолтный admin Langfuse (переопределяемо). Вход в UI: http://localhost:3001
+   LANGFUSE_INIT_USER_EMAIL=admin@example.com
+   LANGFUSE_INIT_USER_NAME=admin
+   LANGFUSE_INIT_USER_PASSWORD=qwerty123456
    ```
 
 2. Соберите образы и поднимите стек. Проверенный путь сборки обходит проблему DNS **EAI_AGAIN** в песочнице Docker-сборки (где `npm`/`PyPI` не могут резолвить реестры) за счёт использования BuildKit-сборщика с включённым DNS (конфигурация в [`buildkitd.toml`](buildkitd.toml:1)):
@@ -273,14 +289,26 @@ demo_ai_agent/
 
 Адаптивные параметры можно менять на лету:
 
-- **UI:** откройте вкладку **Graph Settings** во фронтенде, отредактируйте значения и нажмите Save. Здесь же есть ссылка на UI трейсинга Langfuse.
+- **UI:** откройте вкладку **Graph Settings** во фронтенде, отредактируйте значения (включая чекбокс **On-topic guard**) и нажмите Save. В этой же вкладке есть секция **Observability**: ссылка на UI трейсинга Langfuse и живая сводка метрик бэкенда.
 - **API:**
-  - `GET /api/graph/settings` → текущие значения.
-  - `PUT /api/graph/settings` с JSON-телом любого подмножества `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (положительные целые, валидируются) → сохраняет в Postgres, обновляет Redis-кеш и возвращает новые значения. Изменения применяются сразу на следующем ходу графа.
+  - `GET /api/graph/settings` → текущие значения (включая `TOPIC_GUARD_ENABLED`).
+  - `PUT /api/graph/settings` с JSON-телом любого подмножества `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (положительные целые, валидируются) и/или `TOPIC_GUARD_ENABLED` (булево) → сохраняет в Postgres, обновляет Redis-кеш и возвращает новые значения. Изменения применяются сразу на следующем ходу графа — например, переключение `TOPIC_GUARD_ENABLED` включает/выключает гард в рантайме без перезапуска.
 
-### Включение трейсинга Langfuse (опционально)
+### On-topic guardrail (настраивается в рантайме)
 
-Трейсинг выключен по умолчанию. Чтобы включить: откройте http://localhost:3001, создайте проект, скопируйте его **public** и **secret** ключи в `.env` как `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (оставьте `LANGFUSE_HOST=http://langfuse:3000` для сети compose), затем выполните `docker compose up -d backend`. Без ключей бэкенд работает нормально и никогда не падает из-за Langfuse.
+Узел `topic_guard` ([`backend/app/graph/nodes/topic_guard.py`](backend/app/graph/nodes/topic_guard.py:1)) удерживает чат в рамках программирования и текущего процесса обучения. Он сочетает быструю эвристику по ключевым словам/контексту с LLM-классификатором для неоднозначных случаев и работает **fail-open**: при недоступности LLM по умолчанию считает запрос on-topic (с логированием), чтобы обучение не блокировалось. Запросы не по теме получают вежливый отказ (без RAG и без исполнения); отправка кода всегда on-topic. Отключить можно, выставив `TOPIC_GUARD_ENABLED=false` (env seed) либо через UI Graph Settings / `PUT /api/graph/settings` в рантайме.
+
+### Трейсинг Langfuse (включён из коробки)
+
+Трейсинг работает без ручной настройки: `docker-compose` автоматически создаёт организацию, проект, дефолтного пользователя **admin** и API-ключи проекта в Langfuse и пробрасывает **те же ключи** в бэкенд (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), поэтому `langfuse_enabled=True` с первого запуска. Прогоны графа (узлы, включая `topic_guard`, плюс вызовы LLM) появляются в UI Langfuse под проектом **tutor-project**.
+
+- **UI Langfuse / вход admin:** http://localhost:3001 — email `admin@example.com`, пароль `qwerty123456` (имя пользователя `admin`). Переопределяется переменными `LANGFUSE_INIT_USER_*` в `.env`.
+  > **Если вход admin не работает** (например, после изменения переменных `LANGFUSE_INIT_*`): эти переменные применяются Langfuse **только при первом старте с пустой базой** `langfuse-db`. На уже инициализированном томе они игнорируются. Выполните `docker compose down -v` (удалит том `langfusedbdata`) и затем `docker compose up -d` — INIT отработает на чистой БД, и пользователь admin будет создан заново.
+- **Отключить трейсинг:** сделайте `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` бэкенда пустыми (и очистите дефолты в compose). Тогда бэкенд работает нормально и никогда не падает из-за Langfuse.
+
+### Метрики бэкенда
+
+`GET /api/metrics/summary` возвращает живые агрегаты из БД приложения: число пользователей, суммарные решения, попытки, число успехов/неудач, долю успеха, средний mastery, число выданных заданий, распределение по состояниям навыков и по типам ошибок, плюс статус/ссылку Langfuse. Они дополняют пер-трейсовые метрики latency/объёма/ошибок, которые уже даёт Langfuse. Сводка отображается во вкладке фронтенда **Graph Settings → Observability**.
 
 4. Попробуйте сквозной сценарий: введите *I want to learn Python loops*, получите задачу, напишите решение в редакторе Monaco, нажмите **Run & Check**. Неверный ответ запускает видеоразбор + похожие задания; два верных ответа продвигают вас к следующему навыку.
 

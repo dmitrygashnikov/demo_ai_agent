@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     MASTERY_SUCCESS_STREAK: int = 2
     ADVANCED_SUCCESS_STREAK: int = 3
 
+    # --- Guardrails ---
+    # On-topic guardrail: when enabled, off-topic chat (not about programming or
+    # the current learning process) is politely declined. Fail-open if the LLM
+    # classifier is unavailable. Runtime-editable via the graph settings API/UI.
+    TOPIC_GUARD_ENABLED: bool = True
+
     # --- Langfuse observability (optional tracing of the LangGraph run) ---
     # Tracing is fully optional: if either key is empty it is disabled and the
     # backend runs normally without any observability.

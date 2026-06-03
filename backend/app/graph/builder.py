@@ -33,11 +33,17 @@ from app.graph.nodes.router import intent_router
 from app.graph.nodes.self_execution import self_execution
 from app.graph.nodes.skill_path import skill_path_builder
 from app.graph.nodes.task_selector import task_selector
+from app.graph.nodes.topic_guard import topic_guard
 
 logger = logging.getLogger(__name__)
 
 
 # --- Conditional routing functions -----------------------------------------
+
+def route_topic_guard(state) -> str:
+    """Off-topic messages skip routing/RAG/execution and go straight to respond."""
+    return "respond" if state.get("off_topic") else "intent_router"
+
 
 def route_intent(state) -> str:
     return {
@@ -88,9 +94,15 @@ def build_graph(checkpointer):
     g.add_node("adaptivity_engine", adaptivity_engine)
     g.add_node("clarify", clarify)
     g.add_node("respond", respond)
+    g.add_node("topic_guard", topic_guard)
 
-    # Entry → router
-    g.add_edge(START, "intent_router")
+    # Entry → topic guard → router (or straight to respond when off-topic)
+    g.add_edge(START, "topic_guard")
+    g.add_conditional_edges(
+        "topic_guard",
+        route_topic_guard,
+        {"intent_router": "intent_router", "respond": "respond"},
+    )
     g.add_conditional_edges(
         "intent_router",
         route_intent,

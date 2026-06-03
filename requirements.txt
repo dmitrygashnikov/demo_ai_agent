@@ -2,6 +2,9 @@
 langgraph==0.2.60
 langgraph-checkpoint-postgres==2.0.7
 langchain-core==0.3.28
+# langchain is required by the Langfuse LangChain CallbackHandler used to trace
+# the LangGraph run (see app/observability/langfuse_client.py).
+langchain==0.3.13
 
 # --- Web framework ---
 fastapi==0.115.6

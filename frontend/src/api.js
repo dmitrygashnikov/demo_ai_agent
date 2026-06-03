@@ -61,3 +61,9 @@ export async function updateGraphSettings(values) {
   }
   return r.json();
 }
+
+export async function getMetricsSummary() {
+  const r = await fetch("/api/metrics/summary");
+  if (!r.ok) throw new Error(`GET metrics failed (${r.status})`);
+  return r.json();
+}

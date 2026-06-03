@@ -10,6 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -140,6 +141,10 @@ class GraphSettings(Base):
     max_regen_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     mastery_success_streak: Mapped[int] = mapped_column(Integer, nullable=False)
     advanced_success_streak: Mapped[int] = mapped_column(Integer, nullable=False)
+    # On-topic guardrail toggle (runtime-editable). Default True.
+    topic_guard_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

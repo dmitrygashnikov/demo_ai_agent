@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import {
   getGraphSettings,
+  getMetricsSummary,
   getProgress,
   resume as resumeApi,
   sendChat,
@@ -43,6 +44,7 @@ function GraphSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null); // {type: 'ok'|'err', text}
+  const [metrics, setMetrics] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -57,12 +59,26 @@ function GraphSettingsPanel() {
     }
   }
 
+  async function loadMetrics() {
+    try {
+      const m = await getMetricsSummary();
+      setMetrics(m);
+    } catch {
+      /* ignore — metrics are best-effort */
+    }
+  }
+
   useEffect(() => {
     load();
+    loadMetrics();
   }, []);
 
   function onChange(key, raw) {
     setValues((v) => ({ ...v, [key]: raw }));
+  }
+
+  function onToggle(key, checked) {
+    setValues((v) => ({ ...v, [key]: checked }));
   }
 
   async function onSave() {
@@ -74,6 +90,7 @@ function GraphSettingsPanel() {
       for (const f of SETTING_FIELDS) {
         payload[f.key] = parseInt(values[f.key], 10);
       }
+      payload.TOPIC_GUARD_ENABLED = !!values.TOPIC_GUARD_ENABLED;
       const updated = await updateGraphSettings(payload);
       setValues(updated);
       setStatus({ type: "ok", text: "Saved — applied at runtime (no restart)." });
@@ -110,6 +127,21 @@ function GraphSettingsPanel() {
             </div>
           ))}
 
+          <div className="settings-row" key="TOPIC_GUARD_ENABLED">
+            <label htmlFor="TOPIC_GUARD_ENABLED">On-topic guard</label>
+            <input
+              id="TOPIC_GUARD_ENABLED"
+              type="checkbox"
+              checked={!!values.TOPIC_GUARD_ENABLED}
+              onChange={(e) => onToggle("TOPIC_GUARD_ENABLED", e.target.checked)}
+            />
+            <div className="muted settings-hint">
+              When enabled, off-topic chat (not about programming or the current
+              lesson) is politely declined. Fail-open if the LLM classifier is
+              unavailable. Applied at runtime — no restart.
+            </div>
+          </div>
+
           <div className="settings-actions">
             <button onClick={onSave} disabled={saving}>
               {saving ? "Saving…" : "Save"}
@@ -131,9 +163,58 @@ function GraphSettingsPanel() {
           Open Langfuse (tracing) ↗
         </a>
         <div className="muted">
-          LangGraph runs are traced in Langfuse when keys are configured
-          (optional). UI served on {LANGFUSE_UI_URL}.
+          LangGraph runs (nodes + LLM calls) are traced in Langfuse. Tracing is
+          enabled out-of-the-box for the default admin project. UI served on{" "}
+          {LANGFUSE_UI_URL} — log in with the admin account (see README).
         </div>
+
+        <h3 style={{ marginTop: 16 }}>Backend metrics</h3>
+        {!metrics && <div className="muted">Loading metrics…</div>}
+        {metrics && (
+          <div className="metrics-grid">
+            <div className="metric">
+              <div className="metric-value">{metrics.users}</div>
+              <div className="muted">users</div>
+            </div>
+            <div className="metric">
+              <div className="metric-value">{metrics.total_solves}</div>
+              <div className="muted">solves</div>
+            </div>
+            <div className="metric">
+              <div className="metric-value">{metrics.attempts}</div>
+              <div className="muted">attempts</div>
+            </div>
+            <div className="metric">
+              <div className="metric-value">
+                {Math.round((metrics.success_rate || 0) * 100)}%
+              </div>
+              <div className="muted">success rate</div>
+            </div>
+            <div className="metric">
+              <div className="metric-value">
+                {Math.round((metrics.avg_mastery || 0) * 100)}%
+              </div>
+              <div className="muted">avg mastery</div>
+            </div>
+            <div className="metric">
+              <div className="metric-value">{metrics.tasks_served}</div>
+              <div className="muted">tasks served</div>
+            </div>
+          </div>
+        )}
+        {metrics && (
+          <div className="muted" style={{ marginTop: 8 }}>
+            Tracing {metrics.langfuse?.enabled ? "active" : "disabled"} · source:
+            GET /api/metrics/summary
+          </div>
+        )}
+        <button
+          className="secondary"
+          style={{ marginTop: 8 }}
+          onClick={loadMetrics}
+        >
+          Refresh metrics
+        </button>
       </div>
     </div>
   );

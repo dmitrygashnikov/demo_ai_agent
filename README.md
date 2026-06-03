@@ -81,15 +81,19 @@ graph TD
     LF --> LFDB
 ```
 
-> **Runtime graph settings.** The four adaptive knobs (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) are editable at runtime via `GET/PUT /api/graph/settings` and the **Graph Settings** UI tab — applied **without a backend restart**. Postgres is the source of truth; Redis (`graph:settings`) is a write-through cache.
+> **Runtime graph settings.** The adaptive knobs (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) **and the on-topic guardrail toggle `TOPIC_GUARD_ENABLED`** are editable at runtime via `GET/PUT /api/graph/settings` and the **Graph Settings** UI tab — applied **without a backend restart**. Postgres is the source of truth; Redis (`graph:settings`) is a write-through cache.
 
-> **Observability (optional).** LangGraph runs are traced into a **self-hosted Langfuse** (its own dedicated Postgres `langfuse-db`, UI on http://localhost:3001) via a Langfuse `CallbackHandler`. Tracing is fully optional: with no keys configured the backend runs normally and never depends on Langfuse.
+> **On-topic guardrail.** A `topic_guard` node runs first (right after entry, before the Intent Router) and keeps the conversation about programming and the current learning process. It uses a **hybrid classifier**: a fast deterministic heuristic (programming keywords + the student's active `language`/`current_skill`/`learning_goal`) and, only for ambiguous cases, an LLM classifier (`chat_json`). Behaviour is **fail-open**: if the LLM is unavailable it defaults to on-topic (logged) so a transient outage never blocks learning. Code submissions (intent=code) are always on-topic. Off-topic messages are politely declined (no RAG / no execution). The guard is gated by `TOPIC_GUARD_ENABLED` (default `true`); set it to `false` (env seed or the Graph Settings UI / PUT settings) to disable it at runtime.
+
+> **Observability (enabled out of the box).** LangGraph runs (nodes + LLM calls) are traced into a **self-hosted Langfuse** (its own dedicated Postgres `langfuse-db`, UI on http://localhost:3001) via a Langfuse `CallbackHandler`. `docker-compose` auto-provisions a Langfuse org, project and a **default admin user**, and passes the **same project keys** to the backend, so tracing works without any manual setup. It remains best-effort: if Langfuse is down the backend runs normally. Backend aggregate metrics (users, attempts, success rate, average mastery, …) are exposed at `GET /api/metrics/summary` and shown in the **Graph Settings → Observability** tab.
 
 ### 2.2 LangGraph control flow
 
 ```mermaid
 graph TD
-    START([Student message]) --> ROUTER{Intent Router}
+    START([Student message]) --> GUARD{Topic Guard on-topic}
+    GUARD -->|off-topic| RESPOND[Respond]
+    GUARD -->|on-topic| ROUTER{Intent Router}
 
     ROUTER -->|new or changed goal| GOAL[Goal Planner with interrupt]
     ROUTER -->|theory question| RETRIEVE[RAG Retriever]
@@ -236,11 +240,22 @@ Prerequisites: **Docker** and **Docker Compose**.
    ```
    Optionally enable online code execution via RapidAPI by also setting `RAPIDAPI_KEY` and `RAPIDAPI_CODERUNNER_HOST` (otherwise the local `code-executor` container is used automatically).
 
-   Optionally enable **Langfuse tracing** (off by default) — leave empty to disable:
+   On-topic guardrail (seeds the initial default; also runtime-editable):
    ```
-   LANGFUSE_PUBLIC_KEY=          # from the Langfuse UI project (http://localhost:3001)
-   LANGFUSE_SECRET_KEY=
+   TOPIC_GUARD_ENABLED=true      # politely decline off-topic chat; fail-open without LLM
+   ```
+
+   **Langfuse tracing is enabled out of the box.** Leave the keys empty to use
+   the built-in compose defaults (`pk-lf-tutor-public-key` / `sk-lf-tutor-secret-key`),
+   which are also used to provision the Langfuse project; set your own to override:
+   ```
+   LANGFUSE_PUBLIC_KEY=          # empty → compose default (pk-lf-tutor-public-key)
+   LANGFUSE_SECRET_KEY=          # empty → compose default (sk-lf-tutor-secret-key)
    LANGFUSE_HOST=http://langfuse:3000   # internal compose network address
+   # Default Langfuse admin (override to change). UI login: http://localhost:3001
+   LANGFUSE_INIT_USER_EMAIL=admin@example.com
+   LANGFUSE_INIT_USER_NAME=admin
+   LANGFUSE_INIT_USER_PASSWORD=qwerty123456
    ```
 
 2. Build the images and bring up the stack. The verified build path works around the **EAI_AGAIN** DNS issue in the Docker build sandbox (where `npm`/`PyPI` cannot resolve registries) by using a DNS-enabled BuildKit builder (config in [`buildkitd.toml`](buildkitd.toml:1)):
@@ -273,14 +288,26 @@ Prerequisites: **Docker** and **Docker Compose**.
 
 The adaptive parameters can be changed live:
 
-- **UI:** open the **Graph Settings** tab in the frontend, edit the values and Save. A link to the Langfuse tracing UI is provided in the same tab.
+- **UI:** open the **Graph Settings** tab in the frontend, edit the values (including the **On-topic guard** checkbox) and Save. The same tab shows the **Observability** section: a link to the Langfuse tracing UI plus a live backend metrics summary.
 - **API:**
-  - `GET /api/graph/settings` → current values.
-  - `PUT /api/graph/settings` with a JSON body of any subset of `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (positive integers, validated) → persists to Postgres, refreshes the Redis cache and returns the updated set. Changes take effect immediately on the next graph turn.
+  - `GET /api/graph/settings` → current values (including `TOPIC_GUARD_ENABLED`).
+  - `PUT /api/graph/settings` with a JSON body of any subset of `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (positive integers, validated) and/or `TOPIC_GUARD_ENABLED` (boolean) → persists to Postgres, refreshes the Redis cache and returns the updated set. Changes take effect immediately on the next graph turn — e.g. flipping `TOPIC_GUARD_ENABLED` toggles the guard at runtime without a restart.
 
-### Enabling Langfuse tracing (optional)
+### On-topic guardrail (configurable at runtime)
 
-Tracing is off by default. To enable it: open http://localhost:3001, create a project, copy its **public** and **secret** keys into `.env` as `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (leave `LANGFUSE_HOST=http://langfuse:3000` for the compose network), then `docker compose up -d backend`. Without keys the backend runs normally and never fails because of Langfuse.
+The `topic_guard` node ([`backend/app/graph/nodes/topic_guard.py`](backend/app/graph/nodes/topic_guard.py:1)) keeps the chat about programming and the current learning process. It combines a fast keyword/context heuristic with an LLM classifier for ambiguous cases and is **fail-open**: if the LLM is unavailable it defaults to on-topic (logged) so learning is never blocked. Off-topic messages get a polite refusal (no RAG / no execution); code submissions are always on-topic. Disable it by setting `TOPIC_GUARD_ENABLED=false` (env seed) or via the Graph Settings UI / `PUT /api/graph/settings` at runtime.
+
+### Langfuse tracing (enabled out of the box)
+
+Tracing works with no manual setup: `docker-compose` auto-provisions a Langfuse org, project, a default **admin** user and project API keys, and passes the **same keys** to the backend (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), so `langfuse_enabled=True` from the first boot. Graph runs (nodes incl. `topic_guard`, plus LLM calls) appear in the Langfuse UI under the **tutor-project** project.
+
+- **Langfuse UI / admin login:** http://localhost:3001 — email `admin@example.com`, password `qwerty123456` (username `admin`). Override via the `LANGFUSE_INIT_USER_*` variables in `.env`.
+  > **If the admin login does not work** (e.g. after changing the `LANGFUSE_INIT_*` variables): these variables are applied by Langfuse **only on the first boot against an empty `langfuse-db`**. On an already-initialised volume they are ignored. Run `docker compose down -v` (removes the `langfusedbdata` volume) then `docker compose up -d` — INIT runs against a clean DB and the admin user is re-created.
+- **Disable tracing:** set the backend `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` to empty (and clear the compose defaults). The backend then runs normally and never fails because of Langfuse.
+
+### Backend metrics
+
+`GET /api/metrics/summary` returns live aggregates from the application database: number of users, total solves, attempts, success/failure counts, success rate, average mastery, tasks served, skill-state distribution and error-type distribution, plus the Langfuse status/UI link. These complement the per-trace latency/volume/error metrics that Langfuse already provides. The summary is rendered in the frontend **Graph Settings → Observability** tab.
 
 4. Try the end-to-end flow: type *I want to learn Python loops*, receive a task, write a solution in the Monaco editor, click **Run & Check**. A wrong answer triggers a video review + similar tasks; two correct answers advance you to the next skill.
 
