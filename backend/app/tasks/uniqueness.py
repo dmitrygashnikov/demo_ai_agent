@@ -17,7 +17,20 @@ from app.db.session import get_session
 
 logger = logging.getLogger(__name__)
 
+# Backwards-compatible default constant (the .env / config default). The
+# *effective* cooldown is now read at call time from the runtime settings store
+# so it can be changed without a restart; this constant is the seed default.
 COOLDOWN_SOLVES = settings.COOLDOWN_SOLVES
+
+
+def _cooldown_solves() -> int:
+    """Effective cooldown, read from the runtime settings store (Redis/PG)."""
+    try:
+        from app.settings_store import get_runtime_settings
+
+        return int(get_runtime_settings().get("COOLDOWN_SOLVES", COOLDOWN_SOLVES))
+    except Exception:  # noqa: BLE001
+        return COOLDOWN_SOLVES
 
 
 def _serve_history(user_id: str) -> dict[str, int]:
@@ -44,10 +57,11 @@ def filter_unique_tasks(user_id, candidates, current_solve_count, history=None):
     if history is None:
         history = _serve_history(user_id)
 
+    cooldown = _cooldown_solves()
     allowed = []
     for task in candidates:
         last = history.get(task.id)
-        if last is None or (current_solve_count - last) >= COOLDOWN_SOLVES:
+        if last is None or (current_solve_count - last) >= cooldown:
             allowed.append(task)
 
     # If everything is on cooldown, fall back to the least-recently-served ones.
@@ -80,4 +94,4 @@ def violates_cooldown(user_id: str, task_id: str, current_solve_count: int) -> b
     last = history.get(task_id)
     if last is None:
         return False
-    return (current_solve_count - last) < COOLDOWN_SOLVES
+    return (current_solve_count - last) < _cooldown_solves()

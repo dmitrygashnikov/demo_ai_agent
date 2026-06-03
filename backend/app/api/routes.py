@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -12,6 +12,7 @@ from app.db.progress_repo import get_or_create_user, get_solve_count
 from app.db.session import get_session
 from app.db.skill_graph import skills_for_language
 from app.graph.runner import resume_turn, run_turn
+from app.settings_store import get_runtime_settings, update_runtime_settings
 from app.tasks.uniqueness import violates_cooldown
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,15 @@ class CodeRequest(BaseModel):
 class ResumeRequest(BaseModel):
     session_id: str
     answer: str
+
+
+class GraphSettingsUpdate(BaseModel):
+    """All fields optional — only provided ones are updated."""
+
+    COOLDOWN_SOLVES: int | None = None
+    MAX_REGEN_ATTEMPTS: int | None = None
+    MASTERY_SUCCESS_STREAK: int | None = None
+    ADVANCED_SUCCESS_STREAK: int | None = None
 
 
 @router.post("/goal")
@@ -96,6 +106,27 @@ def skills(language: str):
             for s in skills_for_language(language)
         ],
     }
+
+
+@router.get("/graph/settings")
+def get_graph_settings():
+    """Return the current runtime-editable adaptive graph parameters."""
+    return get_runtime_settings()
+
+
+@router.put("/graph/settings")
+def put_graph_settings(req: GraphSettingsUpdate):
+    """Update runtime graph parameters (applied without a restart).
+
+    Validates positive integers within sane bounds and returns the updated set.
+    """
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No settings provided")
+    try:
+        return update_runtime_settings(updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/uniqueness/audit")

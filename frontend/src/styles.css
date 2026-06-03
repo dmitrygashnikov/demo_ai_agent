@@ -37,3 +37,29 @@ button.secondary { background: #2a2f40; }
 .state.practicing, .state.introducing { background: #b08a0055; }
 .state.remediation { background: #c0392b55; }
 .muted { color: #8a90a2; font-size: 12px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 6px; margin-top: 8px; }
+.tab { background: #2a2f40; padding: 6px 14px; font-size: 13px; }
+.tab.active { background: #1f6feb; }
+
+/* Graph Settings panel */
+.settings-content { padding: 24px; overflow-y: auto; display: block; }
+.settings-panel { max-width: 640px; }
+.settings-panel h2 { margin-top: 0; font-size: 18px; }
+.settings-form { margin-top: 16px; }
+.settings-row { margin-bottom: 16px; display: flex; flex-direction: column; gap: 4px; }
+.settings-row label { font-size: 14px; font-weight: 600; }
+.settings-row input {
+  width: 160px; padding: 8px; border-radius: 6px;
+  border: 1px solid #2a2f40; background: #0f1117; color: #e6e6e6;
+}
+.settings-hint { max-width: 520px; }
+.settings-actions { display: flex; gap: 8px; margin-top: 8px; }
+.settings-status { margin-top: 12px; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+.settings-status.ok { background: #1f8b4c33; border: 1px solid #1f8b4c66; }
+.settings-status.err { background: #c0392b33; border: 1px solid #c0392b66; }
+.settings-langfuse { margin-top: 32px; padding-top: 16px; border-top: 1px solid #242838; }
+.settings-langfuse h3 { font-size: 15px; margin-bottom: 8px; }
+.settings-langfuse a { color: #58a6ff; text-decoration: none; display: inline-block; margin-bottom: 6px; }
+.settings-langfuse a:hover { text-decoration: underline; }

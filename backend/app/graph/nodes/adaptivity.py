@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import logging
 
-from app.config import settings
 from app.db.progress_repo import update_progress
 from app.db.skill_graph import next_skill
 from app.graph.state import TutorState
+from app.settings_store import get_runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,10 @@ def adaptivity_engine(state: TutorState) -> dict:
     skill_state = state.get("skill_state", "practicing")
     difficulty = state.get("difficulty_level", 2)
 
+    rt = get_runtime_settings()
+    mastery_streak = rt["MASTERY_SUCCESS_STREAK"]
+    advanced_streak = rt["ADVANCED_SUCCESS_STREAK"]
+
     exec_result = state.get("execution_result", {}) or {}
     base_msg = (
         f"✅ Correct! Passed {exec_result.get('passed_tests', 0)}/"
@@ -34,7 +38,7 @@ def adaptivity_engine(state: TutorState) -> dict:
     )
 
     # Already mastered + sustained success → escalate to real-world cases.
-    if skill_state in ("mastered", "advanced") and successes >= settings.ADVANCED_SUCCESS_STREAK:
+    if skill_state in ("mastered", "advanced") and successes >= advanced_streak:
         if user_id:
             update_progress(user_id, skill_id, state="advanced")
         logger.info("Escalating skill=%s to advanced real-world cases", skill_id)
@@ -46,7 +50,7 @@ def adaptivity_engine(state: TutorState) -> dict:
         }
 
     # Mastery reached → advance to next skill.
-    if successes >= settings.MASTERY_SUCCESS_STREAK:
+    if successes >= mastery_streak:
         if user_id:
             update_progress(user_id, skill_id, state="mastered", mastery=1.0)
         nxt = next_skill(skill_id)

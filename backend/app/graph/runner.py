@@ -15,8 +15,25 @@ from app.graph.builder import get_graph
 logger = logging.getLogger(__name__)
 
 
-def _config(session_id: str) -> dict:
-    return {"configurable": {"thread_id": session_id}}
+def _config(session_id: str, run_name: str, metadata: dict | None = None) -> dict:
+    """Build the graph run config, attaching the optional Langfuse handler.
+
+    Tracing is best-effort: if the handler cannot be created (Langfuse disabled
+    or unavailable) we simply omit callbacks. Any failure is swallowed so the
+    main flow is never affected (edge case: external observability is down).
+    """
+    config: dict[str, Any] = {"configurable": {"thread_id": session_id}}
+    try:
+        from app.observability.langfuse_client import get_langfuse_handler
+
+        handler = get_langfuse_handler()
+        if handler is not None:
+            config["callbacks"] = [handler]
+            config["run_name"] = run_name
+            config["metadata"] = {"session_id": session_id, **(metadata or {})}
+    except Exception:  # noqa: BLE001
+        logger.debug("Langfuse handler attach skipped", exc_info=True)
+    return config
 
 
 def run_turn(
@@ -32,7 +49,11 @@ def run_turn(
     {"interrupted": True, "question": ...} so the caller can ask the student.
     """
     graph = get_graph()
-    config = _config(session_id)
+    config = _config(
+        session_id,
+        run_name="tutor_turn",
+        metadata={"user_id": user_id, "has_code": bool(submitted_code)},
+    )
 
     state_in: dict[str, Any] = {
         "user_id": user_id,
@@ -56,7 +77,7 @@ def run_turn(
 def resume_turn(session_id: str, answer: str) -> dict:
     """Resume an interrupted graph with the student's clarification answer."""
     graph = get_graph()
-    config = _config(session_id)
+    config = _config(session_id, run_name="tutor_resume")
     try:
         result = graph.invoke(Command(resume=answer), config=config)
     except Exception as exc:  # noqa: BLE001

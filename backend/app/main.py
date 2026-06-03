@@ -25,6 +25,14 @@ def _startup_seed() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("DB init failed: %s", exc)
 
+    # Seed the runtime graph-settings row (idempotent) and warm the cache.
+    try:
+        from app.settings_store import seed_runtime_settings
+
+        seed_runtime_settings()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Runtime settings seeding failed: %s", exc)
+
     if not settings.SEED_ON_STARTUP:
         return
 

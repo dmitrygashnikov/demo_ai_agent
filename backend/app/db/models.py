@@ -121,3 +121,25 @@ class TaskServeHistory(Base):
     task_id: Mapped[str] = mapped_column(String, index=True)
     served_at_solve_count: Mapped[int] = mapped_column(Integer, nullable=False)
     served_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GraphSettings(Base):
+    """Single-row table holding the runtime-editable adaptive graph parameters.
+
+    These mirror the four ``settings.*`` adaptive knobs but are editable at
+    runtime (via the API/UI) and applied WITHOUT a backend restart. Postgres is
+    the source of truth; reads are served from a Redis cache (see
+    ``app.settings_store``). The row is seeded from ``settings`` defaults on
+    startup if it does not yet exist.
+    """
+
+    __tablename__ = "graph_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    cooldown_solves: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_regen_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    mastery_success_streak: Mapped[int] = mapped_column(Integer, nullable=False)
+    advanced_success_streak: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

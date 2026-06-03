@@ -56,7 +56,12 @@ graph TD
 
     subgraph Data_Layer
         PG[(PostgreSQL profile progress checkpointer)]
-        CACHE[(Redis sessions and queue)]
+        CACHE[(Redis sessions queue runtime settings cache)]
+    end
+
+    subgraph Observability
+        LF[Langfuse self-hosted tracing UI on 3001]
+        LFDB[(Langfuse dedicated Postgres)]
     end
 
     WEB --> API
@@ -72,7 +77,13 @@ graph TD
     CONTENT --> INGEST
     ORCH --> PG
     ORCH --> CACHE
+    ORCH -.optional traces.-> LF
+    LF --> LFDB
 ```
+
+> **Runtime graph settings.** The four adaptive knobs (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) are editable at runtime via `GET/PUT /api/graph/settings` and the **Graph Settings** UI tab — applied **without a backend restart**. Postgres is the source of truth; Redis (`graph:settings`) is a write-through cache.
+
+> **Observability (optional).** LangGraph runs are traced into a **self-hosted Langfuse** (its own dedicated Postgres `langfuse-db`, UI on http://localhost:3001) via a Langfuse `CallbackHandler`. Tracing is fully optional: with no keys configured the backend runs normally and never depends on Langfuse.
 
 ### 2.2 LangGraph control flow
 
@@ -225,6 +236,13 @@ Prerequisites: **Docker** and **Docker Compose**.
    ```
    Optionally enable online code execution via RapidAPI by also setting `RAPIDAPI_KEY` and `RAPIDAPI_CODERUNNER_HOST` (otherwise the local `code-executor` container is used automatically).
 
+   Optionally enable **Langfuse tracing** (off by default) — leave empty to disable:
+   ```
+   LANGFUSE_PUBLIC_KEY=          # from the Langfuse UI project (http://localhost:3001)
+   LANGFUSE_SECRET_KEY=
+   LANGFUSE_HOST=http://langfuse:3000   # internal compose network address
+   ```
+
 2. Build the images and bring up the stack. The verified build path works around the **EAI_AGAIN** DNS issue in the Docker build sandbox (where `npm`/`PyPI` cannot resolve registries) by using a DNS-enabled BuildKit builder (config in [`buildkitd.toml`](buildkitd.toml:1)):
 
    ```bash
@@ -243,12 +261,26 @@ Prerequisites: **Docker** and **Docker Compose**.
    docker compose up -d
    ```
 
-   This starts: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend`, with healthchecks and ordered `depends_on`. On first start the backend creates tables, seeds the Skill Graph (Python + JavaScript) and ingests the curated RAG content.
+   This starts: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend`, plus **`langfuse`** and its dedicated **`langfuse-db`** Postgres, all with healthchecks and ordered `depends_on`. On first start the backend creates tables, seeds the Skill Graph (Python + JavaScript), seeds the runtime graph-settings row and ingests the curated RAG content. The Langfuse and Langfuse-Postgres images are pulled ready-made (no build needed).
 
 3. Access the services:
    - **Frontend:** http://localhost:3000
    - **API docs:** http://localhost:8000/docs
    - **Health:** http://localhost:8000/health
+   - **Langfuse (tracing UI):** http://localhost:3001
+
+### Runtime graph settings (no restart)
+
+The adaptive parameters can be changed live:
+
+- **UI:** open the **Graph Settings** tab in the frontend, edit the values and Save. A link to the Langfuse tracing UI is provided in the same tab.
+- **API:**
+  - `GET /api/graph/settings` → current values.
+  - `PUT /api/graph/settings` with a JSON body of any subset of `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (positive integers, validated) → persists to Postgres, refreshes the Redis cache and returns the updated set. Changes take effect immediately on the next graph turn.
+
+### Enabling Langfuse tracing (optional)
+
+Tracing is off by default. To enable it: open http://localhost:3001, create a project, copy its **public** and **secret** keys into `.env` as `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (leave `LANGFUSE_HOST=http://langfuse:3000` for the compose network), then `docker compose up -d backend`. Without keys the backend runs normally and never fails because of Langfuse.
 
 4. Try the end-to-end flow: type *I want to learn Python loops*, receive a task, write a solution in the Monaco editor, click **Run & Check**. A wrong answer triggers a video review + similar tasks; two correct answers advance you to the next skill.
 
@@ -298,7 +330,8 @@ The uniqueness criterion is directly auditable via `GET /api/uniqueness/audit?us
 - **Embeddings API** — OpenAI-compatible (`EMBEDDING_MODEL`) for vectorising content and queries, with a deterministic offline fallback.
 - **Qdrant** — vector DB storing curated theory, video reviews and task prompts with metadata filters (language, concept, doc_type, error_type).
 - **PostgreSQL** — user profile, skill progress, attempts, **`task_serve_history`** (uniqueness cooldown) and the **LangGraph checkpointer**.
-- **Redis** — sessions, sandbox queue and rate limiting (infrastructure service in the stack).
+- **Redis** — sessions, sandbox queue, rate limiting and the **runtime graph-settings cache** (`graph:settings`, source of truth in Postgres).
+- **Langfuse (self-hosted, optional)** — LangGraph observability/tracing via a `CallbackHandler`, backed by its **own dedicated Postgres** (`langfuse-db`). UI on http://localhost:3001; enabled only when keys are set, otherwise tracing is skipped without affecting the backend.
 - **code-executor container** — isolated local sandbox (Python + Node) with timeout/memory limits and an ephemeral filesystem.
 - **RapidAPI CodeRunner** (optional) — online code execution when configured; the factory falls back to local on failure.
 - **Curated documents** — theory notes, coding tasks (prompt + visible/hidden tests + sandbox-verified reference solution), and video reviews (with URLs and time-codes), seeded in [`backend/app/seed/content/curated.py`](backend/app/seed/content/curated.py:1).

@@ -56,7 +56,12 @@ graph TD
 
     subgraph Data_Layer
         PG[(PostgreSQL profile progress checkpointer)]
-        CACHE[(Redis sessions and queue)]
+        CACHE[(Redis sessions queue runtime settings cache)]
+    end
+
+    subgraph Observability
+        LF[Langfuse self-hosted tracing UI on 3001]
+        LFDB[(Langfuse dedicated Postgres)]
     end
 
     WEB --> API
@@ -72,7 +77,13 @@ graph TD
     CONTENT --> INGEST
     ORCH --> PG
     ORCH --> CACHE
+    ORCH -.optional traces.-> LF
+    LF --> LFDB
 ```
+
+> **Runtime-настройки графа.** Четыре адаптивных параметра (`COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK`) редактируются в рантайме через `GET/PUT /api/graph/settings` и вкладку UI **Graph Settings** — применяются **без перезапуска бэкенда**. Источник истины — Postgres; Redis (`graph:settings`) — write-through кеш.
+
+> **Наблюдаемость (опционально).** Прогоны LangGraph трассируются в **self-hosted Langfuse** (со своим отдельным Postgres `langfuse-db`, UI на http://localhost:3001) через Langfuse `CallbackHandler`. Трейсинг полностью опционален: без заданных ключей бэкенд работает обычным образом и никогда не зависит от Langfuse.
 
 ### 2.2 Поток управления LangGraph
 
@@ -225,6 +236,13 @@ demo_ai_agent/
    ```
    Опционально включите онлайн-исполнение кода через RapidAPI, дополнительно задав `RAPIDAPI_KEY` и `RAPIDAPI_CODERUNNER_HOST` (иначе автоматически используется локальный контейнер `code-executor`).
 
+   Опционально включите **трейсинг Langfuse** (по умолчанию выключен) — оставьте пустым, чтобы отключить:
+   ```
+   LANGFUSE_PUBLIC_KEY=          # из проекта в Langfuse UI (http://localhost:3001)
+   LANGFUSE_SECRET_KEY=
+   LANGFUSE_HOST=http://langfuse:3000   # внутренний адрес в сети compose
+   ```
+
 2. Соберите образы и поднимите стек. Проверенный путь сборки обходит проблему DNS **EAI_AGAIN** в песочнице Docker-сборки (где `npm`/`PyPI` не могут резолвить реестры) за счёт использования BuildKit-сборщика с включённым DNS (конфигурация в [`buildkitd.toml`](buildkitd.toml:1)):
 
    ```bash
@@ -243,12 +261,26 @@ demo_ai_agent/
    docker compose up -d
    ```
 
-   Это запускает: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend` — с healthcheck'ами и упорядоченными `depends_on`. При первом запуске бэкенд создаёт таблицы, заполняет Skill Graph (Python + JavaScript) и индексирует подготовленный контент RAG.
+   Это запускает: `postgres`, `qdrant`, `redis`, `code-executor`, `backend`, `frontend`, а также **`langfuse`** и его отдельный Postgres **`langfuse-db`** — все с healthcheck'ами и упорядоченными `depends_on`. При первом запуске бэкенд создаёт таблицы, заполняет Skill Graph (Python + JavaScript), создаёт строку runtime-настроек графа и индексирует подготовленный контент RAG. Образы Langfuse и его Postgres подтягиваются готовыми (pull, сборка не нужна).
 
 3. Доступ к сервисам:
    - **Frontend:** http://localhost:3000
    - **API docs:** http://localhost:8000/docs
    - **Health:** http://localhost:8000/health
+   - **Langfuse (UI трейсинга):** http://localhost:3001
+
+### Runtime-настройки графа (без перезапуска)
+
+Адаптивные параметры можно менять на лету:
+
+- **UI:** откройте вкладку **Graph Settings** во фронтенде, отредактируйте значения и нажмите Save. Здесь же есть ссылка на UI трейсинга Langfuse.
+- **API:**
+  - `GET /api/graph/settings` → текущие значения.
+  - `PUT /api/graph/settings` с JSON-телом любого подмножества `COOLDOWN_SOLVES`, `MAX_REGEN_ATTEMPTS`, `MASTERY_SUCCESS_STREAK`, `ADVANCED_SUCCESS_STREAK` (положительные целые, валидируются) → сохраняет в Postgres, обновляет Redis-кеш и возвращает новые значения. Изменения применяются сразу на следующем ходу графа.
+
+### Включение трейсинга Langfuse (опционально)
+
+Трейсинг выключен по умолчанию. Чтобы включить: откройте http://localhost:3001, создайте проект, скопируйте его **public** и **secret** ключи в `.env` как `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (оставьте `LANGFUSE_HOST=http://langfuse:3000` для сети compose), затем выполните `docker compose up -d backend`. Без ключей бэкенд работает нормально и никогда не падает из-за Langfuse.
 
 4. Попробуйте сквозной сценарий: введите *I want to learn Python loops*, получите задачу, напишите решение в редакторе Monaco, нажмите **Run & Check**. Неверный ответ запускает видеоразбор + похожие задания; два верных ответа продвигают вас к следующему навыку.
 
@@ -298,7 +330,8 @@ demo_ai_agent/
 - **Embeddings API** — OpenAI-совместимый (`EMBEDDING_MODEL`) для векторизации контента и запросов, с детерминированным офлайн-fallback.
 - **Qdrant** — векторная БД, хранящая подготовленную теорию, видеоразборы и условия задач с метаданными-фильтрами (language, concept, doc_type, error_type).
 - **PostgreSQL** — профиль пользователя, прогресс по навыкам, попытки, **`task_serve_history`** (cooldown уникальности) и **LangGraph checkpointer**.
-- **Redis** — сессии, очередь песочницы и rate limiting (инфраструктурный сервис в стеке).
+- **Redis** — сессии, очередь песочницы, rate limiting и **кеш runtime-настроек графа** (`graph:settings`, источник истины — Postgres).
+- **Langfuse (self-hosted, опционально)** — наблюдаемость/трейсинг LangGraph через `CallbackHandler`, с **собственным отдельным Postgres** (`langfuse-db`). UI на http://localhost:3001; включается только при заданных ключах, иначе трейсинг пропускается без влияния на бэкенд.
 - **Контейнер code-executor** — изолированная локальная песочница (Python + Node) с лимитами по времени/памяти и эфемерной файловой системой.
 - **RapidAPI CodeRunner** (опционально) — онлайн-исполнение кода при наличии конфигурации; фабрика откатывается на локальный при сбое.
 - **Подготовленные документы** — заметки по теории, задачи по программированию (условие + видимые/скрытые тесты + проверенное в песочнице эталонное решение) и видеоразборы (с URL и тайм-кодами), заполняемые в [`backend/app/seed/content/curated.py`](backend/app/seed/content/curated.py:1).

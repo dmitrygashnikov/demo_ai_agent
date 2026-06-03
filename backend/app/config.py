@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     MASTERY_SUCCESS_STREAK: int = 2
     ADVANCED_SUCCESS_STREAK: int = 3
 
+    # --- Langfuse observability (optional tracing of the LangGraph run) ---
+    # Tracing is fully optional: if either key is empty it is disabled and the
+    # backend runs normally without any observability.
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "http://langfuse:3000"
+
     # --- App ---
     SEED_ON_STARTUP: bool = True
     LOG_LEVEL: str = "INFO"
@@ -75,6 +82,11 @@ class Settings(BaseSettings):
     @property
     def rapidapi_enabled(self) -> bool:
         return bool(self.RAPIDAPI_KEY and self.RAPIDAPI_CODERUNNER_HOST)
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        """True only when both Langfuse keys are configured."""
+        return bool(self.LANGFUSE_PUBLIC_KEY and self.LANGFUSE_SECRET_KEY)
 
 
 @lru_cache

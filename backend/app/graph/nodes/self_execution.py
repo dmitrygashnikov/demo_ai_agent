@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 import re
 
-from app.config import settings
 from app.execution.base import TestCase
 from app.execution.factory import get_executor
 from app.graph.state import TutorState
 from app.llm.client import LLMUnavailable, chat
+from app.settings_store import get_runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,8 @@ def self_execution(state: TutorState) -> dict:
         }
 
     # Failed — try to regenerate with the error as feedback.
-    if attempts >= settings.MAX_REGEN_ATTEMPTS:
+    max_regen = get_runtime_settings()["MAX_REGEN_ATTEMPTS"]
+    if attempts >= max_regen:
         logger.warning("Self-execution gave up after %d attempts", attempts)
         note = (
             "\n\n_Note: I could not fully verify a runnable example after several "

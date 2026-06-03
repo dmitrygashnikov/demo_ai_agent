@@ -40,3 +40,24 @@ export async function getProgress(userId) {
   const r = await fetch(`/api/progress/${userId}`);
   return r.json();
 }
+
+export async function getGraphSettings() {
+  const r = await fetch("/api/graph/settings");
+  if (!r.ok) throw new Error(`GET settings failed (${r.status})`);
+  return r.json();
+}
+
+export async function updateGraphSettings(values) {
+  const r = await fetch("/api/graph/settings", json("PUT", values));
+  if (!r.ok) {
+    let detail = `PUT settings failed (${r.status})`;
+    try {
+      const body = await r.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return r.json();
+}
