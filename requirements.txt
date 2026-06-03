@@ -1,0 +1,35 @@
+# --- Core orchestration ---
+langgraph==0.2.60
+langgraph-checkpoint-postgres==2.0.7
+langchain-core==0.3.28
+
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+websockets==14.1
+python-multipart==0.0.20
+
+# --- LLM / Embeddings (OpenAI-compatible protocol) ---
+openai==1.59.5
+
+# --- Vector store ---
+qdrant-client==1.12.2
+
+# --- Relational DB ---
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+psycopg[binary]==3.2.3
+
+# --- Cache / sessions / queue ---
+redis==5.2.1
+
+# --- Config & validation ---
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# --- Sandbox / code execution ---
+docker==7.1.0
+
+# --- HTTP client (RapidAPI, external APIs) ---
+httpx==0.28.1
+tenacity==9.0.0

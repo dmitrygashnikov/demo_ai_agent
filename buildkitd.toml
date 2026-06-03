@@ -1,0 +1,5 @@
+# BuildKit daemon config used to give the build sandbox working DNS resolvers.
+# Root cause of the frontend npm EAI_AGAIN failure: the default build sandbox
+# could not resolve registry.npmjs.org. Pinning public DNS here fixes it.
+[dns]
+  nameservers = ["8.8.8.8", "1.1.1.1"]
